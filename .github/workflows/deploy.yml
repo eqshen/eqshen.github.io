@@ -4,44 +4,23 @@ on:
     branches:
       - dep
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [10.x]
-
     steps:
-      - name: 开始运行
-        uses: actions/checkout@v1
-
-      - name: 设置 Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+      - name: Checkout 🛎️
+        uses: actions/checkout@v2 # If you're using actions/checkout@v2 you must set persist-credentials to false in most cases for the deployment to work correctly.
         with:
-          node-version: ${{ matrix.node-version }}
+          persist-credentials: false
 
-      - name: 配置 Git 环境
-        env:
-          ACTION_DEPLOY_KEY: ${{secrets.ACTION_DEPLOY_KEY}}
+      - name: Install and Build 🔧 # This example project is built using npm and outputs the result to the 'build' folder. Replace with the commands required to build your project, or remove this step entirely if your site is pre-built.
         run: |
-          mkdir -p ~/.ssh/
-          echo "$ACTION_DEPLOY_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git config --global user.name "eqshen"
-          git config --global user.email "87026928@qq.com"
-
-      - name: 安装 Hexo CI
-        run: |
-          export TZ='Asia/Shanghai'
-          npm i -g hexo-cli
-          npm i
-
-      - name: 安装插件
-        run: |
+          npm install hexo
           npm install
-
-      - name: 部署博客
-        run: |
-          rm -rf .deploy_git
           hexo g -d
-          rm ~/.ssh/id_rsa
+
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@releases/v3
+        with:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          BRANCH: master # The branch the action should deploy to.
+          FOLDER: public # The folder the action should deploy.
