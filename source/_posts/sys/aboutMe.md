@@ -3,7 +3,9 @@ title: 关于我
 date: 2020-03-22 17:07:42
 tags: 关于
 categories:
-    - ['系统']
+    - ['系统(test)','系统2']
+    - ['系统(test)','sys']
+    - ['关于','about']
 ---
 
 `The more you know,the more you don't know.`
