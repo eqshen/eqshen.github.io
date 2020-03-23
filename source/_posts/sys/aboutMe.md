@@ -13,7 +13,7 @@ categories:
 # Hello, this is EQShen
 <br/>
 
-### 一个在互联网苟且偷生的程序员，That's all。
+### 一个在互联网苟且偷生的程序员，That's all -_-
 <br/>
 
 ### 联系我: eqshen@outlook.com
