@@ -122,7 +122,7 @@ gitalk:
   enable: true # true
   clientID: 56d2807240bc8e3190df
   clientSecret: 12d63223bc32c274131984657c437330f13c8ff2
-  repo: eqshen/eqshen.github.io
+  repo: eqshen.github.io
   owner: eqshen
   admin: eqshen
 
