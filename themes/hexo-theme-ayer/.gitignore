@@ -8,4 +8,4 @@ node_modules/
 .cache
 
 # Setting
-_config.yml
+#_config.yml
