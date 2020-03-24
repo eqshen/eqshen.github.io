@@ -145,3 +145,47 @@ layout: "tags"
 命令`hexo server`
 
 然后就可以到 localhost:4000 查看了
+
+### 7 部署
+
+本次的博客包括评论（gitalk）都上放在github仓库里的（免费的），部署方式可以采用hexo官方推荐的travis。不过我采用了 GitHub Action的方式，博客源码放在仓库[eqshen.github.io](https://github.com/eqshen/eqshen.github.io)的develop分支上，编译后的前端代码放在该仓库的master分支。Github Action的脚本监听的是dep分支，即每次更新完博客，把源码推送到dep分支，博客就会自动编译并部署。配置步骤如下
+
+1. 前提要创建好自己的仓库 xxx.github.io，其中xxx就是github用户名，如果还没了解过，先去百度吧，关键字：Github Page。
+
+2. 在仓库的Actions标签页下点击`New workflow`创建自动部署脚本，然后点击右上角 `skip this:Set up a workflow yourself`，然后就上写脚本了，写好脚本点右上角 `Start Commit`按钮就会在你项目的根目录下生成.github文件夹和相关文件。
+
+3. 上面的脚本当然不用自己写，站在巨人肩膀上，我们直接使用的是  [renzhaosy/hexo-deploy-action](renzhaosy/hexo-deploy-action)。当然，如果你看了还是不懂，你可以直接复制我的脚本（我勉强让你踩一下我的肩膀~~）, 如果你有想法，比如监听的分支不是`dep`你可以自己改。
+
+   ```
+   name: Build and Deploy
+   on:
+     push:
+       branches:
+         - dep
+   jobs:
+     build-and-deploy:
+       runs-on: ubuntu-latest
+       steps:
+       - name: Checkout
+         uses: actions/checkout@master
+   
+       - name: Build and Deploy
+         uses: renzhaosy/hexo-deploy-action@master
+         env:
+           PERSONAL_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+           PUBLISH_REPOSITORY: eqshen/eqshen.github.io # The repository the action should deploy to.
+           BRANCH: master  # The branch the action should deploy to.
+           PUBLISH_DIR: ./public # The folder the action should deploy.
+   ```
+
+4. 到这你就快成功了，接下来给上面脚本 创建 access_token（不然你的脚本可没有权限动你仓库的代码），看到上面脚本里的 `${{ secrets.ACCESS_TOKEN }}`了吗？像不像占位符，在执行的时候等待被替换呢！
+
+   - 点击你github主页右上角的头像，再点击Setting，进入设置。
+   - 点击左侧菜单栏最后一项 `Develop Settings`
+   - 然后点击 `Personal access token`
+   - 再点击 `Generate new token`，然后按需求勾选赋予权限（理论上只要勾repo就行了，反正我除了delete的都勾了）
+   - 最后应该是点击最下面的`Generate Token`, 然后你就会拿到一个 access_token，复制这个token,页面先别关，关了这个token就找不到了,拿到这个token之后并不是去替换上面脚本里的`secrets.ACCESS_TOKEN`
+   - 浏览器新打开一个标签页，进入你仓库的主页  xxx.github.io。点击仓库的的Settings，然后再点击`Secrets` -> `Add a new secret`, Name填 `ACCESS_TOKEN`（跟脚本里的要一致，懂了吧？你仔细品），Value填上面生成的让你复制的那个 `access_token`，然后点击确定。
+   - 最后你往你脚本监听的分支推送源代码，然后点击 `Actions` 查看构建日志吧，可能要一分钟才能构建好。
+
+5. 到此部署结束，还没弄图床，有空把上面几个关键步骤的图配了~~，有问题欢迎下方留言交流。
