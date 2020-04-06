@@ -6,6 +6,10 @@ tags:
     - FIFO
     - LRU
     - LFU
+categories:
+  - ['算法']
+  - ['缓存']
+
 ---
 
 # 常见的缓存算法及动手实现
