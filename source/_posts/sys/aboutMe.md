@@ -14,6 +14,9 @@ categories:
 <br/>
 
 ### 一个在互联网苟且偷生的程序员，That's all -_-
+
+***
+#### 意志产生希望，希望孕育梦想，梦想改变世界
 <br/>
 
 ### 联系我: eqshen@outlook.com
