@@ -370,7 +370,7 @@ public class TestConsumer {
 
 #### 总结
 
-文章只是记录了一下常用的代码，以及MQ使用中需要注意的细节。完整代码看这里。
+文章只是记录了一下常用的代码，以及MQ使用中需要注意的细节。完整代码看[这里](https://github.com/eqshen/RabbitMQBestPractice)。
 
 
 
