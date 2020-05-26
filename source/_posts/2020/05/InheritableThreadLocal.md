@@ -340,6 +340,6 @@ Pool-Thread:14 get 1:value-set-in-parent
 Pool-Thread:14 get 2:value-update-in-parent
 ```
 
-关于TransmittableThreadLocal原理是啥，还需要仔细阅读源码，这边暂时`打个欠条`，等我多梳理几遍再补上。可以参考 [开发者文档](https://github.com/alibaba/transmittable-thread-local/blob/master/docs/developer-guide.md)
+关于TransmittableThreadLocal原理是啥，还需要仔细阅读源码，这边暂时`打个欠条`，等我多梳理几遍再补上。可以参考 [开发者文档](https://github.com/alibaba/transmittable-thread-local/blob/master/docs/developer-guide.md) 还有这个 [应用场景和设计思考](https://github.com/alibaba/transmittable-thread-local/issues/123)
 
 
