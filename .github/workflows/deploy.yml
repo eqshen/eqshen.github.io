@@ -11,7 +11,8 @@ jobs:
       uses: actions/checkout@master
 
     - name: Build and Deploy
-      uses: renzhaosy/hexo-deploy-action@master
+      #uses: renzhaosy/hexo-deploy-action@master
+      uses: ApolloZhu/hexo-deploy-action@master
       env:
         PERSONAL_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         PUBLISH_REPOSITORY: eqshen/eqshen.github.io # The repository the action should deploy to.
