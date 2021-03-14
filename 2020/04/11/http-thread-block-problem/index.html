@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+
+
+<html lang="en">
+
+
+<head>
+  <meta charset="utf-8" />
+   
+  <meta name="keywords" content="eqshen，EQShen，blog，博客，代码，Java，生活" />
+   
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+    一次Http未设置超时导致的线程假死阻塞 |  
+  </title>
+  <meta name="generator" content="hexo-theme-ayer">
+  
+  <link rel="shortcut icon" href="/favicon.ico" />
+  
+  
+<link rel="stylesheet" href="/dist/main.css">
+
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/css/remixicon.min.css">
+
+  
+<link rel="stylesheet" href="/css/custom.css">
+
+  
+  
+<script src="https://cdn.jsdelivr.net/npm/pace-js@1.0.2/pace.min.js"></script>
+
+  
+  
+
+  
+<script>
+var _hmt = _hmt || [];
+(function() {
+	var hm = document.createElement("script");
+	hm.src = "https://hm.baidu.com/hm.js?b08c3d22efe208ff89944223bdab1f33";
+	var s = document.getElementsByTagName("script")[0]; 
+	s.parentNode.insertBefore(hm, s);
+})();
+</script>
+
+
+<link rel="alternate" href="/atom.xml" title="EQShen" type="application/atom+xml">
+</head>
+
+</html>
+
+<body>
+  <div id="app">
+    
+      
+    <main class="content on">
+      <section class="outer">
+  <article
+  id="post-http-thread-block-problem"
+  class="article article-type-post"
+  itemscope
+  itemprop="blogPost"
+  data-scroll-reveal
+>
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h1 class="article-title sea-center" style="border-left:0" itemprop="name">
+  一次Http未设置超时导致的线程假死阻塞
+</h1>
+ 
+
+    </header>
+     
+    <div class="article-meta">
+      <a href="/2020/04/11/http-thread-block-problem/" class="article-date">
+  <time datetime="2020-04-11T14:47:36.000Z" itemprop="datePublished">2020-04-11</time>
+</a> 
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/BUG/">BUG</a> / <a class="article-category-link" href="/categories/%E7%BA%BF%E7%A8%8B/">线程</a>
+  </div>
+  
+<div class="word_count">
+    <span class="post-time">
+        <span class="post-meta-item-icon">
+            <i class="ri-quill-pen-line"></i>
+            <span class="post-meta-item-text"> Word count:</span>
+            <span class="post-count">2.5k</span>
+        </span>
+    </span>
+
+    <span class="post-time">
+        &nbsp; | &nbsp;
+        <span class="post-meta-item-icon">
+            <i class="ri-book-open-line"></i>
+            <span class="post-meta-item-text"> Reading time≈</span>
+            <span class="post-count">11 min</span>
+        </span>
+    </span>
+</div>
+ 
+    </div>
+      
+    <div class="tocbot"></div>
+
+
+
+
+  
+    <div class="article-entry" itemprop="articleBody">
+       
+  <h2 id="故事开始"><a href="#故事开始" class="headerlink" title="故事开始"></a>故事开始</h2><p>某一天，我正在开开心心的写BUG，突然工作群里 @苟且偷生的BUG猿….我一看，这不是我嘛，再一看问题：xxx这笔订单怎么流程走到一半就终止了？快看看是啥问题。</p>
+<h2 id="初步排查"><a href="#初步排查" class="headerlink" title="初步排查"></a>初步排查</h2><p>我一看这问题，难道报错了？没收到预警啊…迅速打开生产日志，一顿操作<code>cd ,ls,less,?,ctrl+c,ctrl+v,n</code>,终于找到这笔订单的遗言：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Order-xxxxx007 开始处理</span><br><span class="line"> ...</span><br><span class="line">Order-xxxxx007 风险评估 ....</span><br><span class="line">...</span><br><span class="line">Order-xxxxx007 调用Third-Api-X接口</span><br></pre></td></tr></table></figure>
+
+<p>没有<code>Exception</code> ，惊喜不？意外不？果断打开吃饭工具IDEA,定位到代码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">ExecutorService executorService = Executors.newCachedThreadPool();      </span><br><span class="line">        </span><br><span class="line">        <span class="comment">/*</span></span><br><span class="line"><span class="comment">        * ...此处略去n行bug</span></span><br><span class="line"><span class="comment">        * */</span></span><br><span class="line">executorService.submit(() -&gt; &#123;</span><br><span class="line">	<span class="comment">//调用三方api X</span></span><br><span class="line">	invokeThirdApi();</span><br><span class="line">&#125;);</span><br><span class="line"><span class="comment">//....</span></span><br></pre></td></tr></table></figure>
+
+<p>这？黑人抬棺的节奏，这什么鬼？线程跑到一半死了？所有流程中断了？怎么会这样。。一幅动图渐渐渗透到我的脑海里…</p>
+<img src="https://i.loli.net/2020/04/11/1APBuLXqSk49Ggh.gif" alt="黑人" style="zoom:67%;" />
+
+<p>再看下invokeThirdAPi，发现里面就postJson发送了一个http请求，不应该啊？</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> String <span class="title">postJson</span><span class="params">(String url,String data)</span></span>&#123;</span><br><span class="line">        HttpRequest httpRequest = cn.hutool.http.HttpUtil.createPost(url);</span><br><span class="line">        httpRequest.header(Header.CONTENT_TYPE,<span class="string">&quot;application/json;charset=UTF-8&quot;</span>).body(data);</span><br><span class="line">        HttpResponse response = httpRequest.execute();</span><br><span class="line">        <span class="keyword">return</span> response.body();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>咦？怎么http调用没有返回结果？http请求没有设置超时时间，第三方接口因为某些异常原因一直没有返回结果！线程一直被占用阻塞！</p>
+<h2 id="初步得出的错误结论"><a href="#初步得出的错误结论" class="headerlink" title="初步得出的错误结论"></a>初步得出的错误结论</h2><p>仔细看了一下中的线程id： <code>[04-09 18:40:15,477] INFO [Thread-4-pool-1329] ...</code></p>
+<p>再看看 一小时前的（一小时前发版服务重启过）<code>[04-09 17:00:15,472] INFO [Thread-4-pool-10] ...</code></p>
+<p>一个小时线程id从10到1300+，按照现在的qps，50个线程都吃不完啊，阻塞这么多线程？恐慌，担忧😟，不知道黑人抬棺费用高不高，给自己也预约一个吧….</p>
+<p>##真正的原因</p>
+<p><code>.......few minutes later........</code></p>
+<p>正在收拾行李的我（别问，问就是跑路），不对啊，我用的是 <code>Executors.newCachedThreadPool()</code>,默认情况下，线程空闲了会销毁的吧？正常销毁了再new出来，线程id是会自增的吧？？？上源码！</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> ExecutorService <span class="title">newCachedThreadPool</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> ThreadPoolExecutor(<span class="number">0</span>, Integer.MAX_VALUE,</span><br><span class="line">                                      <span class="number">60L</span>, TimeUnit.SECONDS,</span><br><span class="line">                                      <span class="keyword">new</span> SynchronousQueue&lt;Runnable&gt;());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ThreadPoolExecutor</span><span class="params">(<span class="keyword">int</span> corePoolSize,</span></span></span><br><span class="line"><span class="function"><span class="params">                              <span class="keyword">int</span> maximumPoolSize,</span></span></span><br><span class="line"><span class="function"><span class="params">                              <span class="keyword">long</span> keepAliveTime,</span></span></span><br><span class="line"><span class="function"><span class="params">                              TimeUnit unit,</span></span></span><br><span class="line"><span class="function"><span class="params">                              BlockingQueue&lt;Runnable&gt; workQueue)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">this</span>(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue,</span><br><span class="line">             Executors.defaultThreadFactory(), defaultHandler);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ThreadPoolExecutor</span><span class="params">(<span class="keyword">int</span> corePoolSize,</span></span></span><br><span class="line"><span class="function"><span class="params">                              <span class="keyword">int</span> maximumPoolSize,</span></span></span><br><span class="line"><span class="function"><span class="params">                              <span class="keyword">long</span> keepAliveTime,</span></span></span><br><span class="line"><span class="function"><span class="params">                              TimeUnit unit,</span></span></span><br><span class="line"><span class="function"><span class="params">                              BlockingQueue&lt;Runnable&gt; workQueue,</span></span></span><br><span class="line"><span class="function"><span class="params">                              ThreadFactory threadFactory,</span></span></span><br><span class="line"><span class="function"><span class="params">                              RejectedExecutionHandler handler)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (corePoolSize &lt; <span class="number">0</span> ||</span><br><span class="line">            maximumPoolSize &lt;= <span class="number">0</span> ||</span><br><span class="line">            maximumPoolSize &lt; corePoolSize ||</span><br><span class="line">            keepAliveTime &lt; <span class="number">0</span>)</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> IllegalArgumentException();</span><br><span class="line">        <span class="keyword">if</span> (workQueue == <span class="keyword">null</span> || threadFactory == <span class="keyword">null</span> || handler == <span class="keyword">null</span>)</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> NullPointerException();</span><br><span class="line">        <span class="keyword">this</span>.corePoolSize = corePoolSize;</span><br><span class="line">        <span class="keyword">this</span>.maximumPoolSize = maximumPoolSize;</span><br><span class="line">        <span class="keyword">this</span>.workQueue = workQueue;</span><br><span class="line">        <span class="keyword">this</span>.keepAliveTime = unit.toNanos(keepAliveTime);</span><br><span class="line">        <span class="keyword">this</span>.threadFactory = threadFactory;</span><br><span class="line">        <span class="keyword">this</span>.handler = handler;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这？这些参数好熟悉又好陌生啊。。。好吧，拿起的我小本本找找…嗯，有了。</p>
+<ul>
+<li><p>int corePoolSize  该线程池中<strong>核心线程数最大值</strong></p>
+<blockquote>
+<p>核心线程，无论有没有任务，都不会被销毁（国企待遇啊），当然，设置了allowCoreThreadTimeOut(true)之后，也是可以被销毁的。</p>
+</blockquote>
+</li>
+<li><p>int maximumPoolSize 该线程池中<strong>线程总数最大值</strong> </p>
+<blockquote>
+<p>该值等于核心线程数量 + 非核心线程数量。</p>
+</blockquote>
+</li>
+<li><p>long keepAliveTime <strong>非核心线程闲置超时时长</strong></p>
+</li>
+<li><p>TimeUnit unit  keepAliveTime的单位</p>
+</li>
+<li><p>BlockingQueue workQueue 阻塞队列，维护着<strong>等待执行的Runnable任务对象</strong>,也就是任务队列。</p>
+<p>有以下几种实现</p>
+<ul>
+<li>LinkedBlockingQueue</li>
+<li>ArrayBlockingQueue</li>
+<li>SynchronousQueue  同步队列，内部容量为0，每个put操作必须等待一个take操作，反之亦然</li>
+<li>DelayQueue 延迟队列，该队列中的元素只有当其指定的延迟时间到了，才能够从队列中获取到该元素 </li>
+</ul>
+</li>
+<li><p>ThreadFactory threadFactory 创建线程的工厂 ，用于批量创建线程。</p>
+</li>
+<li><p>RejectedExecutionHandler handler 拒绝策略，此处不展开</p>
+</li>
+</ul>
+<p>更多关于线程池的资料 看这里 <a target="_blank" rel="noopener" href="https://redspider.gitbook.io/concurrent/di-san-pian-jdk-gong-ju-pian/12">gitbook-线程池</a></p>
+<p>然后，咱们再回头看看 newCachedThreadPool，这是人干的事吗？</p>
+<ul>
+<li>核心线程数为 0</li>
+<li>非核心线程数不限，但存活时间  60 秒</li>
+</ul>
+<p>那么上面这些参数到底是怎么运转的呢？看图</p>
+<img src="https://i.loli.net/2020/04/11/e3y69UpSxah1nu4.jpg" alt="流程图" style="zoom:80%;" />
+
+
+
+<p>再看下 ThreadFactory <code>Executors.defaultThreadFactory()</code></p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">DefaultThreadFactory</span> <span class="keyword">implements</span> <span class="title">ThreadFactory</span> </span>&#123;</span><br><span class="line">        <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> AtomicInteger poolNumber = <span class="keyword">new</span> AtomicInteger(<span class="number">1</span>);</span><br><span class="line">        <span class="keyword">private</span> <span class="keyword">final</span> ThreadGroup group;</span><br><span class="line">        <span class="keyword">private</span> <span class="keyword">final</span> AtomicInteger threadNumber = <span class="keyword">new</span> AtomicInteger(<span class="number">1</span>);</span><br><span class="line">        <span class="keyword">private</span> <span class="keyword">final</span> String namePrefix;</span><br><span class="line"></span><br><span class="line">        DefaultThreadFactory() &#123;</span><br><span class="line">            SecurityManager s = System.getSecurityManager();</span><br><span class="line">            group = (s != <span class="keyword">null</span>) ? s.getThreadGroup() :</span><br><span class="line">                                  Thread.currentThread().getThreadGroup();</span><br><span class="line">            namePrefix = <span class="string">&quot;pool-&quot;</span> +</span><br><span class="line">                          poolNumber.getAndIncrement() +</span><br><span class="line">                         <span class="string">&quot;-thread-&quot;</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="function"><span class="keyword">public</span> Thread <span class="title">newThread</span><span class="params">(Runnable r)</span> </span>&#123;</span><br><span class="line">            Thread t = <span class="keyword">new</span> Thread(group, r,</span><br><span class="line">                                  namePrefix + threadNumber.getAndIncrement(),</span><br><span class="line">                                  <span class="number">0</span>);</span><br><span class="line">            <span class="keyword">if</span> (t.isDaemon())</span><br><span class="line">                t.setDaemon(<span class="keyword">false</span>);</span><br><span class="line">            <span class="keyword">if</span> (t.getPriority() != Thread.NORM_PRIORITY)</span><br><span class="line">                t.setPriority(Thread.NORM_PRIORITY);</span><br><span class="line">            <span class="keyword">return</span> t;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>Thread t = new Thread(group, r,namePrefix + threadNumber.getAndIncrement(),0);</code></p>
+<p>所以：正常的销毁创建也会id自增，这我就放心了。。。</p>
+<h3 id="修复"><a href="#修复" class="headerlink" title="修复"></a>修复</h3><ul>
+<li><p>设置http超时</p>
+</li>
+<li><p>更换自定义线程池（定制化的才是最好的）</p>
+<p>ThreadPoolTaskExecutor 是spring提供的，是对 ThreadPoolExecutor的封装。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Bean(&quot;thirdApiExecutor&quot;)</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> ThreadPoolTaskExecutor <span class="title">thirdApiExecutor</span><span class="params">()</span></span>&#123;</span><br><span class="line">    ThreadPoolTaskExecutor taskExecutor = <span class="keyword">new</span> ThreadPoolTaskExecutor();</span><br><span class="line">    taskExecutor.setCorePoolSize(<span class="number">20</span>);</span><br><span class="line">    taskExecutor.setMaxPoolSize(<span class="number">40</span>);</span><br><span class="line">    taskExecutor.setKeepAliveSeconds(<span class="number">300</span>);</span><br><span class="line">    taskExecutor.setAllowCoreThreadTimeOut(<span class="keyword">true</span>);</span><br><span class="line">    taskExecutor.setWaitForTasksToCompleteOnShutdown(<span class="keyword">true</span>);</span><br><span class="line">    taskExecutor.setAwaitTerminationSeconds(<span class="number">10</span>);</span><br><span class="line">    taskExecutor.setQueueCapacity(<span class="number">200</span>);</span><br><span class="line">    taskExecutor.setThreadNamePrefix(<span class="string">&quot;ThirdApi-Executor-&quot;</span>);</span><br><span class="line">    taskExecutor.setRejectedExecutionHandler(<span class="keyword">new</span> ThreadPoolExecutor.CallerRunsPolicy());</span><br><span class="line">    <span class="keyword">return</span> taskExecutor;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+</li>
+</ul>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ul>
+<li>线程内的 http等IO阻塞行为一定要设置timeout。</li>
+<li>自定义线程池，根据业务场景和特点设置参数。</li>
+<li>平时基本功要扎实，不然翻小本本也挺浪费时间，特别是生产环境出问题了，都是比较急的，没有多少时间给你去学习和查找资料，所以平时要多积累。</li>
+</ul>
+<h2 id="到这就完了？就这？"><a href="#到这就完了？就这？" class="headerlink" title="到这就完了？就这？"></a>到这就完了？就这？</h2><p><strong>到现在，我还有一个最大的疑问：如何确定目前生产环境是否存在被永久阻塞在IO上的线程？</strong></p>
+<h2 id="Java线程状态"><a href="#Java线程状态" class="headerlink" title="Java线程状态"></a>Java线程状态</h2><p>到这里我们就需要知道 Java线程在生命周期中存在哪些状态了</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Thread.State 源码</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">enum</span> <span class="title">State</span> </span>&#123;</span><br><span class="line">    NEW,</span><br><span class="line">    RUNNABLE,</span><br><span class="line">    BLOCKED,</span><br><span class="line">    WAITING,</span><br><span class="line">    TIMED_WAITING,</span><br><span class="line">    TERMINATED;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>具体每个状态的意义以及状态的转换场景看这里 <a target="_blank" rel="noopener" href="https://redspider.gitbook.io/concurrent/di-yi-pian-ji-chu-pian/4">Java线程状态及主要转化方法</a></p>
+<h2 id="复现事故现场"><a href="#复现事故现场" class="headerlink" title="复现事故现场"></a>复现事故现场</h2><h3 id="再次分析"><a href="#再次分析" class="headerlink" title="再次分析"></a>再次分析</h3><p>文中也多次提到”阻塞“关键字，那永久等待Http 响应的那个线程应该是什么状态呢？？首先猜想是<code>Blocked</code>,但按照理论来讲，只有等待锁的线程才会是Blocked状态，使用排除法，我最终猜想它是<code>Runnable</code>状态，下面就来证实一下。</p>
+<h3 id="代码复现"><a href="#代码复现" class="headerlink" title="代码复现"></a>代码复现</h3><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Test</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">testThreadBlock</span><span class="params">()</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">        ExecutorService executorService = Executors.newCachedThreadPool();</span><br><span class="line"></span><br><span class="line">        executorService.submit(() -&gt; &#123;</span><br><span class="line">            <span class="comment">//模拟调用三方api</span></span><br><span class="line">            invokeThirdApi();</span><br><span class="line">        &#125;);</span><br><span class="line"></span><br><span class="line">        <span class="comment">//添加一个其他任务</span></span><br><span class="line">        executorService.submit(()-&gt;&#123;</span><br><span class="line">           <span class="keyword">while</span> (<span class="keyword">true</span>)&#123;</span><br><span class="line">               log.info(<span class="string">&quot;线程 &#123;&#125; 正在干活&quot;</span>,Thread.currentThread().getName());</span><br><span class="line">               Thread.sleep(<span class="number">3000</span>);</span><br><span class="line">           &#125;</span><br><span class="line">        &#125;);</span><br><span class="line">				<span class="comment">//让主线程在此休息</span></span><br><span class="line">        Thread.sleep(Integer.MAX_VALUE);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">invokeThirdApi</span><span class="params">()</span></span>&#123;</span><br><span class="line">        InputStream is = System.in;</span><br><span class="line">        Scanner scanner = <span class="keyword">new</span> Scanner(is);</span><br><span class="line">        String threadName = Thread.currentThread().getName();</span><br><span class="line">        log.info(<span class="string">&quot;&#123;&#125; IO输入开始&quot;</span>,threadName);</span><br><span class="line">        String input =  scanner.next();</span><br><span class="line">        log.info(<span class="string">&quot;&#123;&#125; IO输入结束：&#123;&#125;&quot;</span>,threadName,input);</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p>简单解释一下上面程序：</p>
+<ul>
+<li><p>基于junit测试的方式</p>
+</li>
+<li><p>testThreadBlock方法中定义一个线程池<code>newCachedThreadPool</code>,然后向线程池提交了两个任务</p>
+<ul>
+<li>第一个是一次性调用三方接口的任务</li>
+<li>第二个是一个重复执行的任务</li>
+</ul>
+</li>
+<li><p>调用三方接口，这里使用<code>Scanner</code>监听终端输入来模拟（当然也可以自己本地启一个测试项目，暴露一个接口，然后接口逻辑中打个断点，这样在http请求的时候被断点卡住就行了）</p>
+</li>
+</ul>
+<p>看一下程序运行的日志：</p>
+<figure class="highlight verilog"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">14</span>:<span class="number">56</span><span class="variable">.852</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">1</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : pool-<span class="number">1</span>-thread-<span class="number">1</span> IO输入开始</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">14</span>:<span class="number">56</span><span class="variable">.850</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">14</span>:<span class="number">59</span><span class="variable">.858</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">15</span>:<span class="number">02</span><span class="variable">.861</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">15</span>:<span class="number">05</span><span class="variable">.865</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">15</span>:<span class="number">08</span><span class="variable">.867</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">15</span>:<span class="number">11</span><span class="variable">.870</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br><span class="line"><span class="number">2020</span>-<span class="number">04</span>-<span class="number">11</span> <span class="number">19</span>:<span class="number">15</span>:<span class="number">14</span><span class="variable">.875</span>  INFO <span class="number">27281</span> --- [pool-<span class="number">1</span>-thread-<span class="number">2</span>] com<span class="variable">.eqshen</span><span class="variable">.springdemo</span><span class="variable">.ThreadPoolTest</span>     : 线程 pool-<span class="number">1</span>-thread-<span class="number">2</span> 正在干活</span><br></pre></td></tr></table></figure>
+
+<p>可以发现thread-1启动之后直接就被阻塞了</p>
+<h3 id="使用jstack"><a href="#使用jstack" class="headerlink" title="使用jstack"></a>使用jstack</h3><p>下面就使用jstack查看一下线程的真正状态</p>
+<p>使用<code>jps</code>命令查看进程id</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">27281 JUnitStarter</span><br><span class="line">20500</span><br><span class="line">27285 Jps</span><br><span class="line">26586 RemoteMavenServer</span><br><span class="line">27279 Launcher</span><br></pre></td></tr></table></figure>
+
+<p>然后执行命令 <code>jstack 27281 &gt; test.jstack</code></p>
+<p>到 test.jstack中间中按照关键字搜索 <code>pool-1-thread-1</code>会找到如下内容：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">&quot;pool-1-thread-1&quot; #19 prio=5 os_prio=31 cpu=2.46ms elapsed=215.35s tid=0x00007fddfabf0000 nid=0x6703 runnable  [0x0000700007286000]</span><br><span class="line">   java.lang.Thread.State: RUNNABLE</span><br><span class="line">        at java.io.FileInputStream.readBytes(java.base@<span class="number">11.0</span>.<span class="number">2</span>/Native Method)</span><br><span class="line">        at java.io.FileInputStream.read(java.base@<span class="number">11.0</span>.<span class="number">2</span>/FileInputStream.java:<span class="number">279</span>)</span><br><span class="line">        at java.io.BufferedInputStream.read1(java.base@<span class="number">11.0</span>.<span class="number">2</span>/BufferedInputStream.java:<span class="number">290</span>)</span><br><span class="line">        at java.io.BufferedInputStream.read(java.base@<span class="number">11.0</span>.<span class="number">2</span>/BufferedInputStream.java:<span class="number">351</span>)</span><br><span class="line">        - locked &lt;<span class="number">0x0000000700133178</span>&gt; (a java.io.BufferedInputStream)</span><br><span class="line">        at sun.nio.cs.StreamDecoder.readBytes(java.base@<span class="number">11.0</span>.<span class="number">2</span>/StreamDecoder.java:<span class="number">284</span>)</span><br><span class="line">        at sun.nio.cs.StreamDecoder.implRead(java.base@<span class="number">11.0</span>.<span class="number">2</span>/StreamDecoder.java:<span class="number">326</span>)</span><br><span class="line">        at sun.nio.cs.StreamDecoder.read(java.base@<span class="number">11.0</span>.<span class="number">2</span>/StreamDecoder.java:<span class="number">178</span>)</span><br><span class="line">        - locked &lt;<span class="number">0x000000070aa0fef0</span>&gt; (a java.io.InputStreamReader)</span><br><span class="line">        at java.io.InputStreamReader.read(java.base@<span class="number">11.0</span>.<span class="number">2</span>/InputStreamReader.java:<span class="number">185</span>)</span><br><span class="line">        at java.io.Reader.read(java.base@<span class="number">11.0</span>.<span class="number">2</span>/Reader.java:<span class="number">189</span>)</span><br><span class="line">        at java.util.Scanner.readInput(java.base@<span class="number">11.0</span>.<span class="number">2</span>/Scanner.java:<span class="number">882</span>)</span><br><span class="line">        at java.util.Scanner.next(java.base@<span class="number">11.0</span>.<span class="number">2</span>/Scanner.java:<span class="number">1476</span>)</span><br><span class="line">        at com.eqshen.springdemo.ThreadPoolTest.invokeThirdApi(ThreadPoolTest.java:<span class="number">44</span>)</span><br><span class="line">        at com.eqshen.springdemo.ThreadPoolTest.lambda$testThreadBlock$<span class="number">0</span>(ThreadPoolTest.java:<span class="number">25</span>)</span><br><span class="line">        at com.eqshen.springdemo.ThreadPoolTest$$Lambda$<span class="number">767</span>/<span class="number">0x0000000800568440.</span>run(Unknown Source)</span><br><span class="line">        at java.util.concurrent.Executors$RunnableAdapter.call(java.base@<span class="number">11.0</span>.<span class="number">2</span>/Executors.java:<span class="number">515</span>)</span><br><span class="line">        at java.util.concurrent.FutureTask.run$$$capture(java.base@<span class="number">11.0</span>.<span class="number">2</span>/FutureTask.java:<span class="number">264</span>)</span><br><span class="line">        at java.util.concurrent.FutureTask.run(java.base@<span class="number">11.0</span>.<span class="number">2</span>/FutureTask.java)</span><br><span class="line">        at java.util.concurrent.ThreadPoolExecutor.runWorker(java.base@<span class="number">11.0</span>.<span class="number">2</span>/ThreadPoolExecutor.java:<span class="number">1128</span>)</span><br><span class="line">        at java.util.concurrent.ThreadPoolExecutor$Worker.run(java.base@<span class="number">11.0</span>.<span class="number">2</span>/ThreadPoolExecutor.java:<span class="number">628</span>)</span><br><span class="line">        at java.lang.Thread.run(java.base@<span class="number">11.0</span>.<span class="number">2</span>/Thread.java:<span class="number">834</span>)</span><br></pre></td></tr></table></figure>
+
+<p>可以看出线程状态和我们猜想的是一致的：RUNNABLE</p>
+<h3 id="递归懵逼"><a href="#递归懵逼" class="headerlink" title="递归懵逼"></a>递归懵逼</h3><p>那现在如何在茫茫程海中定位到这种问题？？？</p>
+<blockquote>
+<p>“pool-1-thread-1” #19 prio=5 os_prio=31 cpu=2.46ms elapsed=215.35s tid=0x00007fddfabf0000 nid=0x6703 runnable  [0x0000700007286000]</p>
+</blockquote>
+<p>如果多次执行jstack，发现 <code>cpu=2.46ms</code> 值是不变的（IO阻塞了，永远不会再被分配到cpu时间片，当然不变了），这也是我目前能想到的办法☹️</p>
+ 
+      <!-- reward -->
+      
+    </div>
+    
+
+    <!-- copyright -->
+    
+    <div class="declare">
+      <ul class="post-copyright">
+        <li>
+          <i class="ri-copyright-line"></i>
+          <strong>Copyright： </strong>
+          
+          Copyright is owned by the author. For commercial reprints, please contact the author for authorization. For non-commercial reprints, please indicate the source.
+          
+        </li>
+      </ul>
+    </div>
+    
+    <footer class="article-footer">
+       
+<div class="share-btn">
+      <span class="share-sns share-outer">
+        <i class="ri-share-forward-line"></i>
+        分享
+      </span>
+      <div class="share-wrap">
+        <i class="arrow"></i>
+        <div class="share-icons">
+          
+          <a class="weibo share-sns" href="javascript:;" data-type="weibo">
+            <i class="ri-weibo-fill"></i>
+          </a>
+          <a class="weixin share-sns wxFab" href="javascript:;" data-type="weixin">
+            <i class="ri-wechat-fill"></i>
+          </a>
+          <a class="qq share-sns" href="javascript:;" data-type="qq">
+            <i class="ri-qq-fill"></i>
+          </a>
+          <a class="douban share-sns" href="javascript:;" data-type="douban">
+            <i class="ri-douban-line"></i>
+          </a>
+          <!-- <a class="qzone share-sns" href="javascript:;" data-type="qzone">
+            <i class="icon icon-qzone"></i>
+          </a> -->
+          
+          <a class="facebook share-sns" href="javascript:;" data-type="facebook">
+            <i class="ri-facebook-circle-fill"></i>
+          </a>
+          <a class="twitter share-sns" href="javascript:;" data-type="twitter">
+            <i class="ri-twitter-fill"></i>
+          </a>
+          <a class="google share-sns" href="javascript:;" data-type="google">
+            <i class="ri-google-fill"></i>
+          </a>
+        </div>
+      </div>
+</div>
+
+<div class="wx-share-modal">
+    <a class="modal-close" href="javascript:;"><i class="ri-close-circle-line"></i></a>
+    <p>扫一扫，分享到微信</p>
+    <div class="wx-qrcode">
+      <img src="//api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://eqshen.github.io/2020/04/11/http-thread-block-problem/" alt="微信分享二维码">
+    </div>
+</div>
+
+<div id="share-mask"></div>  
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/BUG/" rel="tag">BUG</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/HTTP/" rel="tag">HTTP</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%BA%BF%E7%A8%8B/" rel="tag">线程</a></li></ul>
+
+    </footer>
+  </div>
+
+   
+  <nav class="article-nav">
+    
+      <a href="/2020/05/17/SpringBoot-RabbitMQ-practice/" class="article-nav-link">
+        <strong class="article-nav-caption">上一篇</strong>
+        <div class="article-nav-title">
+          
+            SpringBoot-RabbitMQ实践记录
+          
+        </div>
+      </a>
+    
+    
+      <a href="/2020/04/06/lru-lfu-cache/" class="article-nav-link">
+        <strong class="article-nav-caption">下一篇</strong>
+        <div class="article-nav-title">常见的缓存算法及动手实现</div>
+      </a>
+    
+  </nav>
+
+  
+   
+<div class="gitalk" id="gitalk-container"></div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.css">
+
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+
+<script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '56d2807240bc8e3190df',
+    clientSecret: '12d63223bc32c274131984657c437330f13c8ff2',
+    repo: 'eqshen.github.io',
+    owner: 'eqshen',
+    admin: ['eqshen'],
+    // id: location.pathname,      // Ensure uniqueness and length less than 50
+    id: md5(location.pathname),
+    distractionFreeMode: false,  // Facebook-like distraction free mode
+    pagerDirection: 'last'
+  })
+
+  gitalk.render('gitalk-container')
+</script>
+  
+</article>
+
+</section>
+      <footer class="footer">
+  <div class="outer">
+    <ul>
+      <li>
+        Copyrights &copy;
+        2020-2021
+        <i class="ri-heart-fill heart_icon"></i> EQShen
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        
+        Powered by <a href="https://hexo.io" target="_blank">Hexo</a>
+        <span class="division">|</span>
+        Theme - <a href="https://github.com/Shen-Yu/hexo-theme-ayer" target="_blank">Ayer</a>
+        
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        <span>
+  <span><i class="ri-user-3-fill"></i>Visitors:<span id="busuanzi_value_site_uv"></span></s>
+  <span class="division">|</span>
+  <span><i class="ri-eye-fill"></i>Views:<span id="busuanzi_value_page_pv"></span></span>
+</span>
+        
+      </li>
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      <li>
+        <!-- cnzz统计 -->
+        
+      </li>
+    </ul>
+  </div>
+</footer>
+      <div class="float_btns">
+        <div class="totop" id="totop">
+  <i class="ri-arrow-up-line"></i>
+</div>
+
+<div class="todark" id="todark">
+  <i class="ri-moon-line"></i>
+</div>
+
+      </div>
+    </main>
+    <aside class="sidebar on">
+      <button class="navbar-toggle"></button>
+<nav class="navbar">
+  
+  <div class="logo">
+    <a href="/"><img src="/images/ayer-side.svg" alt="EQShen"></a>
+  </div>
+  
+  <ul class="nav nav-main">
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/">主页</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/archives">归档</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/categories">分类</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/tags">标签</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/friends">友链</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2020/03/22/sys-aboutMe">关于我</a>
+    </li>
+    
+  </ul>
+</nav>
+<nav class="navbar navbar-bottom">
+  <ul class="nav">
+    <li class="nav-item">
+      
+      <a class="nav-item-link nav-item-search"  title="Search">
+        <i class="ri-search-line"></i>
+      </a>
+      
+      
+      <a class="nav-item-link" target="_blank" href="/atom.xml" title="RSS Feed">
+        <i class="ri-rss-line"></i>
+      </a>
+      
+    </li>
+  </ul>
+</nav>
+<div class="search-form-wrap">
+  <div class="local-search local-search-plugin">
+  <input type="search" id="local-search-input" class="local-search-input" placeholder="Search...">
+  <div id="local-search-result" class="local-search-result"></div>
+</div>
+</div>
+    </aside>
+    <script>
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        document.querySelector('.content').classList.remove('on');
+        document.querySelector('.sidebar').classList.remove('on');
+      }
+    </script>
+    <div id="mask"></div>
+
+<!-- #reward -->
+<div id="reward">
+  <span class="close"><i class="ri-close-line"></i></span>
+  <p class="reward-p"><i class="ri-cup-line"></i>请我喝杯咖啡吧~</p>
+  <div class="reward-box">
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/alipay.jpg">
+      <span class="reward-type">支付宝</span>
+    </div>
+    
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/wechat.jpg">
+      <span class="reward-type">微信</span>
+    </div>
+    
+  </div>
+</div>
+    
+<script src="/js/jquery-2.0.3.min.js"></script>
+
+
+<script src="/js/lazyload.min.js"></script>
+
+<!-- Tocbot -->
+
+
+<script src="/js/tocbot.min.js"></script>
+
+<script>
+  tocbot.init({
+    tocSelector: '.tocbot',
+    contentSelector: '.article-entry',
+    headingSelector: 'h1, h2, h3, h4, h5, h6',
+    hasInnerContainers: true,
+    scrollSmooth: true,
+    scrollContainer: 'main',
+    positionFixedSelector: '.tocbot',
+    positionFixedClass: 'is-position-fixed',
+    fixedSidebarOffset: 'auto'
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.css">
+<script src="https://cdn.jsdelivr.net/npm/justifiedGallery@3.7.0/dist/js/jquery.justifiedGallery.min.js"></script>
+
+<script src="/dist/main.js"></script>
+
+<!-- ImageViewer -->
+
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe. 
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" style="display:none" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css">
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+
+<script>
+    function viewer_init() {
+        let pswpElement = document.querySelectorAll('.pswp')[0];
+        let $imgArr = document.querySelectorAll(('.article-entry img:not(.reward-img)'))
+
+        $imgArr.forEach(($em, i) => {
+            $em.onclick = () => {
+                // slider展开状态
+                // todo: 这样不好，后面改成状态
+                if (document.querySelector('.left-col.show')) return
+                let items = []
+                $imgArr.forEach(($em2, i2) => {
+                    let img = $em2.getAttribute('data-idx', i2)
+                    let src = $em2.getAttribute('data-target') || $em2.getAttribute('src')
+                    let title = $em2.getAttribute('alt')
+                    // 获得原图尺寸
+                    const image = new Image()
+                    image.src = src
+                    items.push({
+                        src: src,
+                        w: image.width || $em2.width,
+                        h: image.height || $em2.height,
+                        title: title
+                    })
+                })
+                var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, items, {
+                    index: parseInt(i)
+                });
+                gallery.init()
+            }
+        })
+    }
+    viewer_init()
+</script>
+
+<!-- MathJax -->
+
+<!-- Katex -->
+
+<!-- busuanzi  -->
+
+
+<script src="/js/busuanzi-2.3.pure.min.js"></script>
+
+
+<!-- ClickLove -->
+
+
+<script src="/js/clickLove.js"></script>
+
+
+<!-- ClickBoom1 -->
+
+<!-- ClickBoom2 -->
+
+<!-- CodeCopy -->
+
+
+<link rel="stylesheet" href="/css/clipboard.css">
+
+<script src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js"></script>
+<script>
+  function wait(callback, seconds) {
+    var timelag = null;
+    timelag = window.setTimeout(callback, seconds);
+  }
+  !function (e, t, a) {
+    var initCopyCode = function(){
+      var copyHtml = '';
+      copyHtml += '<button class="btn-copy" data-clipboard-snippet="">';
+      copyHtml += '<i class="ri-file-copy-2-line"></i><span>COPY</span>';
+      copyHtml += '</button>';
+      $(".highlight .code pre").before(copyHtml);
+      $(".article pre code").before(copyHtml);
+      var clipboard = new ClipboardJS('.btn-copy', {
+        target: function(trigger) {
+          return trigger.nextElementSibling;
+        }
+      });
+      clipboard.on('success', function(e) {
+        let $btn = $(e.trigger);
+        $btn.addClass('copied');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-checkbox-circle-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPIED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-checkbox-circle-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+      clipboard.on('error', function(e) {
+        e.clearSelection();
+        let $btn = $(e.trigger);
+        $btn.addClass('copy-failed');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-time-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPY FAILED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-time-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+    }
+    initCopyCode();
+  }(window, document);
+</script>
+
+
+<!-- CanvasBackground -->
+
+
+    
+  </div>
+</body>
+
+</html>
