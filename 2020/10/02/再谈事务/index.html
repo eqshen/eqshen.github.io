@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+
+
+<html lang="en">
+
+
+<head>
+  <meta charset="utf-8" />
+   
+  <meta name="keywords" content="eqshen，EQShen，blog，博客，代码，Java，生活" />
+   
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+    再谈事务 |  
+  </title>
+  <meta name="generator" content="hexo-theme-ayer">
+  
+  <link rel="shortcut icon" href="/favicon.ico" />
+  
+  
+<link rel="stylesheet" href="/dist/main.css">
+
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/css/remixicon.min.css">
+
+  
+<link rel="stylesheet" href="/css/custom.css">
+
+  
+  
+<script src="https://cdn.jsdelivr.net/npm/pace-js@1.0.2/pace.min.js"></script>
+
+  
+  
+
+  
+<script>
+var _hmt = _hmt || [];
+(function() {
+	var hm = document.createElement("script");
+	hm.src = "https://hm.baidu.com/hm.js?b08c3d22efe208ff89944223bdab1f33";
+	var s = document.getElementsByTagName("script")[0]; 
+	s.parentNode.insertBefore(hm, s);
+})();
+</script>
+
+
+<link rel="alternate" href="/atom.xml" title="EQShen" type="application/atom+xml">
+</head>
+
+</html>
+
+<body>
+  <div id="app">
+    
+      
+    <main class="content on">
+      <section class="outer">
+  <article
+  id="post-再谈事务"
+  class="article article-type-post"
+  itemscope
+  itemprop="blogPost"
+  data-scroll-reveal
+>
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h1 class="article-title sea-center" style="border-left:0" itemprop="name">
+  再谈事务
+</h1>
+ 
+
+    </header>
+     
+    <div class="article-meta">
+      <a href="/2020/10/02/%E5%86%8D%E8%B0%88%E4%BA%8B%E5%8A%A1/" class="article-date">
+  <time datetime="2020-10-02T15:30:14.000Z" itemprop="datePublished">2020-10-02</time>
+</a> 
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%95%B0%E6%8D%AE%E5%BA%93/">数据库</a> / <a class="article-category-link" href="/categories/%E6%95%B0%E6%8D%AE%E5%BA%93/%E4%BA%8B%E5%8A%A1/">事务</a>
+  </div>
+  
+<div class="word_count">
+    <span class="post-time">
+        <span class="post-meta-item-icon">
+            <i class="ri-quill-pen-line"></i>
+            <span class="post-meta-item-text"> Word count:</span>
+            <span class="post-count">3k</span>
+        </span>
+    </span>
+
+    <span class="post-time">
+        &nbsp; | &nbsp;
+        <span class="post-meta-item-icon">
+            <i class="ri-book-open-line"></i>
+            <span class="post-meta-item-text"> Reading time≈</span>
+            <span class="post-count">10 min</span>
+        </span>
+    </span>
+</div>
+ 
+    </div>
+      
+    <div class="tocbot"></div>
+
+
+
+
+  
+    <div class="article-entry" itemprop="articleBody">
+       
+  <h2 id="再谈事务"><a href="#再谈事务" class="headerlink" title="再谈事务"></a>再谈事务</h2><p>最近在复习事务相关的知识，结合实际工作中的方案，加深对事务的理解</p>
+<h3 id="一、基础概念回顾"><a href="#一、基础概念回顾" class="headerlink" title="一、基础概念回顾"></a>一、基础概念回顾</h3><h4 id="ACID"><a href="#ACID" class="headerlink" title="ACID"></a>ACID</h4><ul>
+<li><p>Atomicity（原子性）：多个写操作，要全部成功，要么全部失败/回滚 </p>
+</li>
+<li><p>Consistency（一致性）：</p>
+<ul>
+<li><p>事务可以保障数据库从一个状态转移到另一个状态，没有中间状态。（如A向B转账）</p>
+</li>
+<li><p>中间状态不可以被观察到。</p>
+<blockquote>
+<p>针对“中间状态”说下个人理解，在强一致性的事务中，肯定是要求无法被观察到的；但是在弱一致性的柔性事务中，中间状态是可以被观察到的，只要满足最终一致性即可。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+<li><p>Isolation（隔离性）：两个并发的事务在执行时，互不影响。事务1对某个数值的修改不能影响到事务2，事务2也不知道事务1干了啥，完全是两个黑盒操作。当如果两个事务同时对某一资源进行访问时，就要进行加锁控制，并行变串行，但依然满足“并发”的概念。</p>
+</li>
+<li><p>Durablity（持久性）：事务成功提交后，更改永久保存，不能回滚。</p>
+</li>
+</ul>
+<h4 id="隔离级别"><a href="#隔离级别" class="headerlink" title="隔离级别"></a>隔离级别</h4><table>
+<thead>
+<tr>
+<th>事务隔离级别</th>
+<th>发生脏读</th>
+<th>不可重复读</th>
+<th>发生幻读</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Read Uncommitted 读未提交</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Read Committed 读已提交（不可重复读）</td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Repeatable Read 可重复读</td>
+<td>否</td>
+<td>否</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Serializable 串行化</td>
+<td>否</td>
+<td>否</td>
+<td>否</td>
+</tr>
+</tbody></table>
+<ul>
+<li>脏读：事务A读取了事务B更新的数据，然后B回滚操作，那么A读取到的数据是脏数据</li>
+<li>不可重复读：事务 A 多次读取同一数据，事务 B 在事务A多次读取的过程中，对数据作了更新并提交，导致事务A多次读取同一数据时，结果 不一致。关注点是已存在数据的修改。</li>
+<li>幻读：跟RC容易混，举例：事务A读取某班级所有学生数据共32人，然后事务B插入了2名新学生数据到该班级，事务A再次读取所有学生数据，发现有34人。事务A:”怎么变成34了难道刚才我发生幻觉了？”….这就是幻读，关注点在行数的增加。<blockquote>
+<p>如果是减少2人，还是幻读吗？答案：不是了。<code>幻读</code>强调的是一个事务按照某个相同条件多次读取记录时，后读取时读到了之前没有读到的记录。所以<code>减少两人</code>这种情况应该算是 <strong>不可重复读</strong>。</p>
+</blockquote>
+</li>
+</ul>
+<h3 id="二、分布式事务"><a href="#二、分布式事务" class="headerlink" title="二、分布式事务"></a>二、分布式事务</h3><h5 id="1-何为分布式事务"><a href="#1-何为分布式事务" class="headerlink" title="1.何为分布式事务"></a>1.何为分布式事务</h5><p>相对于本地事务而言，在SOA等架构下，用户一次操作，需要修改<strong>多个数据库</strong>的数据且要求该次操作要满足事务特性（ACID）, 而跨越了多个数据库实例的情况下，单机事务就不适用了。</p>
+<p><strong>举个栗子</strong>：用户的资产余额数据保存在 订单库A，而用户的积分保存在 活动库B，库存数据保存在 商品库C。按照业务要求，用户完成一笔下单，要赠送订单金额*100的活动积分。那么用户单次的下单行为就至少存在以下数据库修改：</p>
+<ul>
+<li>订单库A 金额减少 x元</li>
+<li>订单库B 用户积分增加 x*100点</li>
+<li>商品库C 要进行扣库存操作</li>
+</ul>
+<p>以上 就是典型需要使用分布式事务的场景了。</p>
+<h5 id="2-分布式理论"><a href="#2-分布式理论" class="headerlink" title="2. 分布式理论"></a>2. 分布式理论</h5><p>比较常见的主要是<strong>CAP理论</strong>和<strong>BASE理论</strong>，这里不做介绍可以自行百度复习。</p>
+<h3 id="三、常见的分布式方案-XA与TCC"><a href="#三、常见的分布式方案-XA与TCC" class="headerlink" title="三、常见的分布式方案(XA与TCC)"></a>三、常见的分布式方案(XA与TCC)</h3><h4 id="1-DTP模型-二阶段提交（2PC）"><a href="#1-DTP模型-二阶段提交（2PC）" class="headerlink" title="1.DTP模型-二阶段提交（2PC）"></a>1.DTP模型-二阶段提交（2PC）</h4><blockquote>
+<p>Distributed Transaction Processing（DTP）采用的是XA协议</p>
+</blockquote>
+<p>模型中涉及到的角色</p>
+<ul>
+<li>TM,Transaction Manager 事务管理器（也称协调者）</li>
+<li>RM, Resource Manager 资源管理器（也称参与者）</li>
+<li>AP,Application 应用，通常和RM看做一个整体</li>
+</ul>
+<h5 id="第一阶段-投票阶段"><a href="#第一阶段-投票阶段" class="headerlink" title="第一阶段 投票阶段"></a>第一阶段 投票阶段</h5><p>目的：TM询问各个数据库实例参与者RM 是否具备正常执行事务的条件。</p>
+<p>主要步骤</p>
+<ol>
+<li>协调者向所有的参与者发送事务执行请求，并等待参与者反馈事务执行结果</li>
+<li>事务参与者收到请求之后，执行事务，<strong>但不提交</strong>，并记录事务日志。</li>
+<li>参与者将自己事务执行情况反馈给协调者，同时<strong>阻塞等待</strong>协调者的后续指令。</li>
+</ol>
+<h5 id="第二阶段-事务提交阶段"><a href="#第二阶段-事务提交阶段" class="headerlink" title="第二阶段 事务提交阶段"></a>第二阶段 事务提交阶段</h5><p>第一阶段的询问将会出现三种情况</p>
+<ol>
+<li>所有参与者都返回成功</li>
+<li>部分参与者成功，部分返回失败</li>
+<li>协调者等待超时</li>
+</ol>
+<h6 id="对于第1种情况，协调者会通知所有参与者提交事务"><a href="#对于第1种情况，协调者会通知所有参与者提交事务" class="headerlink" title="对于第1种情况，协调者会通知所有参与者提交事务"></a>对于第1种情况，协调者会通知所有参与者提交事务</h6><img src="https://tva1.sinaimg.cn/large/007S8ZIlgy1gjbb6cuxwwj30m20gnwfg.jpg" style="zoom:50%;" />
+
+<h6 id="对于第2，3种情况，协调者就会发送回滚通知"><a href="#对于第2，3种情况，协调者就会发送回滚通知" class="headerlink" title="对于第2，3种情况，协调者就会发送回滚通知"></a>对于第2，3种情况，协调者就会发送回滚通知</h6><img src="https://tva1.sinaimg.cn/large/007S8ZIlgy1gjbb8fo47gj30m20gnjsc.jpg" style="zoom:50%;" />
+
+<h5 id="两阶段方案的不足之处"><a href="#两阶段方案的不足之处" class="headerlink" title="两阶段方案的不足之处"></a>两阶段方案的不足之处</h5><ol>
+<li>协调者的单点问题，协调者挂了，参与者会无限等待（可引入超时机制解决）；</li>
+<li>同步阻塞，所有参与者都同步阻塞等待协调者“指挥”下一步操作，效率太低；</li>
+<li>数据不一致，两阶段协议的整个流程中，还是存在导致数据不一致的可能（部分参与者提交失败，协调者与参与者同时挂了）</li>
+</ol>
+<h4 id="2-DTP模型-三阶段提交（3PC）"><a href="#2-DTP模型-三阶段提交（3PC）" class="headerlink" title="2.DTP模型-三阶段提交（3PC）"></a>2.DTP模型-三阶段提交（3PC）</h4><p>是三阶段协议王者归来吗？且往下看</p>
+<p>三阶段主要比二阶段增加了一个“预询”阶段，以及超时策略来减少集群的阻塞时间。</p>
+<h5 id="第一阶段-Can-Commit"><a href="#第一阶段-Can-Commit" class="headerlink" title="第一阶段 Can_Commit"></a>第一阶段 Can_Commit</h5><ol>
+<li>协调者向所有参与者发送事务询问通知，询问是否可以执行事务，并等待响应</li>
+<li>各个参与者依据自身状态给出 预估值答复，如果可以执行事务，就进入预备状态</li>
+</ol>
+<h5 id="第二阶段-Pre-Commit"><a href="#第二阶段-Pre-Commit" class="headerlink" title="第二阶段 Pre_Commit"></a>第二阶段 Pre_Commit</h5><p>第一阶段的“预询”结果也会有三种</p>
+<ol>
+<li>所有参与者都返回确定信息</li>
+<li>部分参与者回复 否定信息</li>
+<li>协调者等待超时</li>
+</ol>
+<p>对于第1种情况，协调者会向所有参与者发送执行事务请求（和两阶段协议的第一阶段内容一样）：</p>
+<ol>
+<li>协调者向所有的事务参与者发送事务执行通知</li>
+<li>参与者收到通知后，执行事务，<strong>但不提交</strong></li>
+<li>参与者将事务执行情况返回给客户端</li>
+</ol>
+<p>对于第2、3种情况，协调者会发送abort通知，所有参与者退出“预备”状态</p>
+<img src="https://tva1.sinaimg.cn/large/007S8ZIlgy1gjbbadcbe0j30mc0gn754.jpg" style="zoom:50%;" />
+
+<h5 id="第三阶段-Do-Commit"><a href="#第三阶段-Do-Commit" class="headerlink" title="第三阶段 Do_Commit"></a>第三阶段 Do_Commit</h5><p>第二阶段的执行结果也会有 三种情况：</p>
+<ol>
+<li>所有参与参与者执行事务成功</li>
+<li>部分参与者执行事务失败</li>
+<li>协调者等待超时</li>
+</ol>
+<p>同样的，协调者会针对上述3种情况进行不同的处理</p>
+<h6 id="对于第1种，协调者会向所有参与者发送事务提交请求"><a href="#对于第1种，协调者会向所有参与者发送事务提交请求" class="headerlink" title="对于第1种，协调者会向所有参与者发送事务提交请求"></a>对于第1种，协调者会向所有参与者发送事务提交请求</h6><img src="https://tva1.sinaimg.cn/large/007S8ZIlgy1gjbbbah8o8j30k20qagmz.jpg" style="zoom:50%;" />
+
+<h6 id="对于第2，3种，协调者会发送事务回滚通知给所有参与者。"><a href="#对于第2，3种，协调者会发送事务回滚通知给所有参与者。" class="headerlink" title="对于第2，3种，协调者会发送事务回滚通知给所有参与者。"></a>对于第2，3种，协调者会发送事务回滚通知给所有参与者。</h6><img src="https://tva1.sinaimg.cn/large/007S8ZIlgy1gjbbca965kj30ks0qaq4b.jpg" style="zoom:50%;" />
+
+<blockquote>
+<p>补充，如果在该阶段，参与者等待协调者发送的消息超时，那么默认会提交事务。而如果此时协调者发送的是回滚通知，那么还是会出现数据不一致的可能，也就是说，三阶段相比两阶段主要提交了两点：1.第一阶段的预询操作更加轻量级，如果有部分参与者无法执行事务，直接Abort，而不用所有参与者预执行事务；2.增加了超时自动提交机制，避免了长时间等待造成资源浪费。</p>
+</blockquote>
+<blockquote>
+<p>思考：如果第三阶段，最后有参与者返回“提交事务失败”，该怎么处理？</p>
+</blockquote>
+<h4 id="2PC和3PC的区别"><a href="#2PC和3PC的区别" class="headerlink" title="2PC和3PC的区别"></a>2PC和3PC的区别</h4><ul>
+<li>2PC 只有协调者超时机制，3PC协调者参与者都有超时机制</li>
+<li>3PC 将2PC的第一阶段拆为2步，粒度更细，资源锁定时间更短</li>
+</ul>
+<h4 id="3-TCC方案"><a href="#3-TCC方案" class="headerlink" title="3.TCC方案"></a>3.TCC方案</h4><p>TCC是try,confirm/cancel的简称，即TCC主要有两阶段组成，分别是Try阶段和Confirm/Cancel阶段。</p>
+<blockquote>
+<p>通俗点讲，一个完整的事务 = Try + Confirm或Cancel</p>
+</blockquote>
+<p>TCC方案是一种柔性事务方案的实现，那么何为<code>柔性事务</code>？</p>
+<h5 id="一阶段-Try"><a href="#一阶段-Try" class="headerlink" title="一阶段-Try"></a>一阶段-Try</h5><p>Try中的逻辑与传统事务机制中的业务逻辑相同。该阶段主要的工作是：完成所有业务检查，预留必须的业务资源。</p>
+<h5 id="二阶段-Confirm"><a href="#二阶段-Confirm" class="headerlink" title="二阶段-Confirm"></a>二阶段-Confirm</h5><p>真正执行的业务逻辑，不做任何业务检查，<strong>但只能使用Try阶段预留的资源</strong>。此外，confirm操作还有几点要求</p>
+<ol>
+<li>Try操作成功，Confirm操作一定会成功，不存在失败的情况；</li>
+<li>Confirm操作要满足幂等性，保证一笔分布式事务能且只能成功一次。</li>
+</ol>
+<h5 id="二阶段-Cancel"><a href="#二阶段-Cancel" class="headerlink" title="二阶段-Cancel"></a>二阶段-Cancel</h5><p>释放 Try 阶段预留的业务资源。同样的，Cancel 操作也需要满足幂等性。</p>
+<h5 id="TCC方案存在的三个问题"><a href="#TCC方案存在的三个问题" class="headerlink" title="TCC方案存在的三个问题"></a>TCC方案存在的三个问题</h5><ol>
+<li>空回滚 - 没有调用 try，直接调用Cancel，要求在设计系统时，能够是被空回滚请求，并处理。</li>
+<li>幂等 - 由于网络原因Contirm、Cancel接口被多次调用，要保证重复执行与只执行一次具有同样效果，可以设置当时事务状态来避免</li>
+<li>悬挂 - Cancel比Try先执行了。什么情况下会发生：网络原因Try操作阻塞，超时后，TCC框架协调器调用Cancel接口，Cancel执行后，Try操作才到达。解决方案：执行try操作之前先查询一下二阶段接口是否被执行</li>
+</ol>
+<h5 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h5><ol>
+<li>TCC相对于 XA 等传统模型，其特征在于它不依赖 RM 对分布式事务的支持，而是通过对业务逻辑的分解来实现分布式事务。</li>
+<li>TCC要根据自身业务模型特点来控制并发。</li>
+</ol>
+<h3 id="XA与TCC的异同"><a href="#XA与TCC的异同" class="headerlink" title="XA与TCC的异同"></a>XA与TCC的异同</h3><h5 id="隔离性"><a href="#隔离性" class="headerlink" title="隔离性"></a>隔离性</h5><ul>
+<li><p>XA对隔离性的控制，是通过对依赖的资源进行加锁的方式，且要求对锁的持有要到最后一阶段，这种长时间对资源进行加锁的方式，会使得并发性能非常低下</p>
+</li>
+<li><p>TCC对隔离性的处理思想是通过业务层来控制，Try阶段结束后就释放底层数据库锁，由业务层对持有的资源进行加锁，从而降低锁的粒度，提高并发性。</p>
+<blockquote>
+<p>上面这是什么意思呢？举个例子，A账户有100元，A向B账户转账30元，在try阶段会对A账户扣除30元，并增加30元冻结资金（这依赖底层数据库锁保证原子性），这样就在业务层面把30块给锁定了（转为业务层加锁），然后Confirm阶段向B账户增加30元，如果增加成功，则将A账户冻结资金扣除；如果失败则执行Cancel，将30元冻结资金返回给A账户。这样即使A账户需要同时给多个账户转账30元，也不是出现”双花“的情况。</p>
+</blockquote>
+</li>
+</ul>
+<h5 id="原子性"><a href="#原子性" class="headerlink" title="原子性"></a>原子性</h5><ul>
+<li>XA通过两阶段提交协议来控制原子性，即Prepare, Commit/Rollback</li>
+<li>TCC也是通过两阶段来控制原子性，只不过更像是应用层的原子性，Try相当于 Prepare，Confirm相当于Commit，Cancel相当于Rollback。</li>
+</ul>
+<h5 id="一致性"><a href="#一致性" class="headerlink" title="一致性"></a>一致性</h5><ul>
+<li>XA于TCC的一致性都是由其原子性和隔离性来保证</li>
+<li>XA方案的一致性是强一致性，数据的中间过程状态是无法被观察到的；而TCC的中间状态是可以被观察到的，是一种弱一致性（追求最终一致性）。</li>
+</ul>
+<h3 id="四、常见的开源解决方案"><a href="#四、常见的开源解决方案" class="headerlink" title="四、常见的开源解决方案"></a>四、常见的开源解决方案</h3><ol>
+<li><p><a target="_blank" rel="noopener" href="http://seata.io/zh-cn/docs/overview/what-is-seata.html">Seata</a></p>
+</li>
+<li><p><a target="_blank" rel="noopener" href="https://github.com/changmingxie/tcc-transaction">Tcc-Transaction</a></p>
+</li>
+<li><p><a target="_blank" rel="noopener" href="https://github.com/liuyangming/ByteTCC">ByteTCC</a></p>
+</li>
+</ol>
+<h3 id="五、最后"><a href="#五、最后" class="headerlink" title="五、最后"></a>五、最后</h3><p>以上内容只是整理作为学习笔记，仅抛砖引玉作用，大家共同学习进步，你学废了嘛？</p>
+<h3 id="六、参考"><a href="#六、参考" class="headerlink" title="六、参考"></a>六、参考</h3><ol>
+<li><a target="_blank" rel="noopener" href="https://mp.weixin.qq.com/s?__biz=MzUzMzU5Mjc1Nw==&amp;mid=2247483681&amp;idx=1&amp;sn=05845495c5ef33683addd98fffc72106&amp;chksm=faa0eefbcdd767edbf46cea6f223b426e276dd4d9b19cce64f59387590818f5e4eb96c7d2533&amp;mpshare=1&amp;scene=2&amp;srcid=0118GSYShGZaOyCndUoAqsae&amp;from=timeline#rd">分布式事务综述</a></li>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/pyycsd/article/details/102803015">分布式事务-两阶段与三阶段提</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.bytesoft.org/tcc-intro/">TCC事务机制简介</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.zhihu.com/question/48627764">如何理解TCC分布式事务</a></li>
+<li><a target="_blank" rel="noopener" href="https://juejin.im/post/6844903829603876878">分布式事务 Seata TCC 模式深度解析</a></li>
+</ol>
+ 
+      <!-- reward -->
+      
+    </div>
+    
+
+    <!-- copyright -->
+    
+    <div class="declare">
+      <ul class="post-copyright">
+        <li>
+          <i class="ri-copyright-line"></i>
+          <strong>Copyright： </strong>
+          
+          Copyright is owned by the author. For commercial reprints, please contact the author for authorization. For non-commercial reprints, please indicate the source.
+          
+        </li>
+      </ul>
+    </div>
+    
+    <footer class="article-footer">
+       
+<div class="share-btn">
+      <span class="share-sns share-outer">
+        <i class="ri-share-forward-line"></i>
+        分享
+      </span>
+      <div class="share-wrap">
+        <i class="arrow"></i>
+        <div class="share-icons">
+          
+          <a class="weibo share-sns" href="javascript:;" data-type="weibo">
+            <i class="ri-weibo-fill"></i>
+          </a>
+          <a class="weixin share-sns wxFab" href="javascript:;" data-type="weixin">
+            <i class="ri-wechat-fill"></i>
+          </a>
+          <a class="qq share-sns" href="javascript:;" data-type="qq">
+            <i class="ri-qq-fill"></i>
+          </a>
+          <a class="douban share-sns" href="javascript:;" data-type="douban">
+            <i class="ri-douban-line"></i>
+          </a>
+          <!-- <a class="qzone share-sns" href="javascript:;" data-type="qzone">
+            <i class="icon icon-qzone"></i>
+          </a> -->
+          
+          <a class="facebook share-sns" href="javascript:;" data-type="facebook">
+            <i class="ri-facebook-circle-fill"></i>
+          </a>
+          <a class="twitter share-sns" href="javascript:;" data-type="twitter">
+            <i class="ri-twitter-fill"></i>
+          </a>
+          <a class="google share-sns" href="javascript:;" data-type="google">
+            <i class="ri-google-fill"></i>
+          </a>
+        </div>
+      </div>
+</div>
+
+<div class="wx-share-modal">
+    <a class="modal-close" href="javascript:;"><i class="ri-close-circle-line"></i></a>
+    <p>扫一扫，分享到微信</p>
+    <div class="wx-qrcode">
+      <img src="//api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://eqshen.github.io/2020/10/02/%E5%86%8D%E8%B0%88%E4%BA%8B%E5%8A%A1/" alt="微信分享二维码">
+    </div>
+</div>
+
+<div id="share-mask"></div>  
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Transaction/" rel="tag">Transaction</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E4%BA%8B%E5%8A%A1/" rel="tag">事务</a></li></ul>
+
+    </footer>
+  </div>
+
+   
+  <nav class="article-nav">
+    
+      <a href="/2020/11/02/ShardingSphere%E5%88%86%E5%BA%93%E5%88%86%E8%A1%A8%E4%BD%93%E9%AA%8C/" class="article-nav-link">
+        <strong class="article-nav-caption">上一篇</strong>
+        <div class="article-nav-title">
+          
+            ShardingSphere分库分表体验
+          
+        </div>
+      </a>
+    
+    
+      <a href="/2020/09/05/create-your-starter/" class="article-nav-link">
+        <strong class="article-nav-caption">下一篇</strong>
+        <div class="article-nav-title">实现自己的SpringBoot Starter</div>
+      </a>
+    
+  </nav>
+
+  
+   
+<div class="gitalk" id="gitalk-container"></div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.css">
+
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+
+<script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '56d2807240bc8e3190df',
+    clientSecret: '12d63223bc32c274131984657c437330f13c8ff2',
+    repo: 'eqshen.github.io',
+    owner: 'eqshen',
+    admin: ['eqshen'],
+    // id: location.pathname,      // Ensure uniqueness and length less than 50
+    id: md5(location.pathname),
+    distractionFreeMode: false,  // Facebook-like distraction free mode
+    pagerDirection: 'last'
+  })
+
+  gitalk.render('gitalk-container')
+</script>
+  
+</article>
+
+</section>
+      <footer class="footer">
+  <div class="outer">
+    <ul>
+      <li>
+        Copyrights &copy;
+        2020-2022
+        <i class="ri-heart-fill heart_icon"></i> EQShen
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        
+        Powered by <a href="https://hexo.io" target="_blank">Hexo</a>
+        <span class="division">|</span>
+        Theme - <a href="https://github.com/Shen-Yu/hexo-theme-ayer" target="_blank">Ayer</a>
+        
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        <span>
+  <span><i class="ri-user-3-fill"></i>Visitors:<span id="busuanzi_value_site_uv"></span></s>
+  <span class="division">|</span>
+  <span><i class="ri-eye-fill"></i>Views:<span id="busuanzi_value_page_pv"></span></span>
+</span>
+        
+      </li>
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      <li>
+        <!-- cnzz统计 -->
+        
+      </li>
+    </ul>
+  </div>
+</footer>
+      <div class="float_btns">
+        <div class="totop" id="totop">
+  <i class="ri-arrow-up-line"></i>
+</div>
+
+<div class="todark" id="todark">
+  <i class="ri-moon-line"></i>
+</div>
+
+      </div>
+    </main>
+    <aside class="sidebar on">
+      <button class="navbar-toggle"></button>
+<nav class="navbar">
+  
+  <div class="logo">
+    <a href="/"><img src="/images/ayer-side.svg" alt="EQShen"></a>
+  </div>
+  
+  <ul class="nav nav-main">
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/">主页</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/archives">归档</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/categories">分类</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/tags">标签</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/friends">友链</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2020/03/22/sys-aboutMe">关于我</a>
+    </li>
+    
+  </ul>
+</nav>
+<nav class="navbar navbar-bottom">
+  <ul class="nav">
+    <li class="nav-item">
+      
+      <a class="nav-item-link nav-item-search"  title="Search">
+        <i class="ri-search-line"></i>
+      </a>
+      
+      
+      <a class="nav-item-link" target="_blank" href="/atom.xml" title="RSS Feed">
+        <i class="ri-rss-line"></i>
+      </a>
+      
+    </li>
+  </ul>
+</nav>
+<div class="search-form-wrap">
+  <div class="local-search local-search-plugin">
+  <input type="search" id="local-search-input" class="local-search-input" placeholder="Search...">
+  <div id="local-search-result" class="local-search-result"></div>
+</div>
+</div>
+    </aside>
+    <script>
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        document.querySelector('.content').classList.remove('on');
+        document.querySelector('.sidebar').classList.remove('on');
+      }
+    </script>
+    <div id="mask"></div>
+
+<!-- #reward -->
+<div id="reward">
+  <span class="close"><i class="ri-close-line"></i></span>
+  <p class="reward-p"><i class="ri-cup-line"></i>请我喝杯咖啡吧~</p>
+  <div class="reward-box">
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/alipay.jpg">
+      <span class="reward-type">支付宝</span>
+    </div>
+    
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/wechat.jpg">
+      <span class="reward-type">微信</span>
+    </div>
+    
+  </div>
+</div>
+    
+<script src="/js/jquery-2.0.3.min.js"></script>
+
+
+<script src="/js/lazyload.min.js"></script>
+
+<!-- Tocbot -->
+
+
+<script src="/js/tocbot.min.js"></script>
+
+<script>
+  tocbot.init({
+    tocSelector: '.tocbot',
+    contentSelector: '.article-entry',
+    headingSelector: 'h1, h2, h3, h4, h5, h6',
+    hasInnerContainers: true,
+    scrollSmooth: true,
+    scrollContainer: 'main',
+    positionFixedSelector: '.tocbot',
+    positionFixedClass: 'is-position-fixed',
+    fixedSidebarOffset: 'auto'
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.css">
+<script src="https://cdn.jsdelivr.net/npm/justifiedGallery@3.7.0/dist/js/jquery.justifiedGallery.min.js"></script>
+
+<script src="/dist/main.js"></script>
+
+<!-- ImageViewer -->
+
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe. 
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" style="display:none" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css">
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+
+<script>
+    function viewer_init() {
+        let pswpElement = document.querySelectorAll('.pswp')[0];
+        let $imgArr = document.querySelectorAll(('.article-entry img:not(.reward-img)'))
+
+        $imgArr.forEach(($em, i) => {
+            $em.onclick = () => {
+                // slider展开状态
+                // todo: 这样不好，后面改成状态
+                if (document.querySelector('.left-col.show')) return
+                let items = []
+                $imgArr.forEach(($em2, i2) => {
+                    let img = $em2.getAttribute('data-idx', i2)
+                    let src = $em2.getAttribute('data-target') || $em2.getAttribute('src')
+                    let title = $em2.getAttribute('alt')
+                    // 获得原图尺寸
+                    const image = new Image()
+                    image.src = src
+                    items.push({
+                        src: src,
+                        w: image.width || $em2.width,
+                        h: image.height || $em2.height,
+                        title: title
+                    })
+                })
+                var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, items, {
+                    index: parseInt(i)
+                });
+                gallery.init()
+            }
+        })
+    }
+    viewer_init()
+</script>
+
+<!-- MathJax -->
+
+<!-- Katex -->
+
+<!-- busuanzi  -->
+
+
+<script src="/js/busuanzi-2.3.pure.min.js"></script>
+
+
+<!-- ClickLove -->
+
+
+<script src="/js/clickLove.js"></script>
+
+
+<!-- ClickBoom1 -->
+
+<!-- ClickBoom2 -->
+
+<!-- CodeCopy -->
+
+
+<link rel="stylesheet" href="/css/clipboard.css">
+
+<script src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js"></script>
+<script>
+  function wait(callback, seconds) {
+    var timelag = null;
+    timelag = window.setTimeout(callback, seconds);
+  }
+  !function (e, t, a) {
+    var initCopyCode = function(){
+      var copyHtml = '';
+      copyHtml += '<button class="btn-copy" data-clipboard-snippet="">';
+      copyHtml += '<i class="ri-file-copy-2-line"></i><span>COPY</span>';
+      copyHtml += '</button>';
+      $(".highlight .code pre").before(copyHtml);
+      $(".article pre code").before(copyHtml);
+      var clipboard = new ClipboardJS('.btn-copy', {
+        target: function(trigger) {
+          return trigger.nextElementSibling;
+        }
+      });
+      clipboard.on('success', function(e) {
+        let $btn = $(e.trigger);
+        $btn.addClass('copied');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-checkbox-circle-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPIED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-checkbox-circle-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+      clipboard.on('error', function(e) {
+        e.clearSelection();
+        let $btn = $(e.trigger);
+        $btn.addClass('copy-failed');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-time-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPY FAILED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-time-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+    }
+    initCopyCode();
+  }(window, document);
+</script>
+
+
+<!-- CanvasBackground -->
+
+
+    
+  </div>
+</body>
+
+</html>

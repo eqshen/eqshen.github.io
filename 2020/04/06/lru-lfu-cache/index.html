@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+
+
+<html lang="en">
+
+
+<head>
+  <meta charset="utf-8" />
+   
+  <meta name="keywords" content="eqshen，EQShen，blog，博客，代码，Java，生活" />
+   
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+    常见的缓存算法及动手实现 |  
+  </title>
+  <meta name="generator" content="hexo-theme-ayer">
+  
+  <link rel="shortcut icon" href="/favicon.ico" />
+  
+  
+<link rel="stylesheet" href="/dist/main.css">
+
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/css/remixicon.min.css">
+
+  
+<link rel="stylesheet" href="/css/custom.css">
+
+  
+  
+<script src="https://cdn.jsdelivr.net/npm/pace-js@1.0.2/pace.min.js"></script>
+
+  
+  
+
+  
+<script>
+var _hmt = _hmt || [];
+(function() {
+	var hm = document.createElement("script");
+	hm.src = "https://hm.baidu.com/hm.js?b08c3d22efe208ff89944223bdab1f33";
+	var s = document.getElementsByTagName("script")[0]; 
+	s.parentNode.insertBefore(hm, s);
+})();
+</script>
+
+
+<link rel="alternate" href="/atom.xml" title="EQShen" type="application/atom+xml">
+</head>
+
+</html>
+
+<body>
+  <div id="app">
+    
+      
+    <main class="content on">
+      <section class="outer">
+  <article
+  id="post-lru-lfu-cache"
+  class="article article-type-post"
+  itemscope
+  itemprop="blogPost"
+  data-scroll-reveal
+>
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h1 class="article-title sea-center" style="border-left:0" itemprop="name">
+  常见的缓存算法及动手实现
+</h1>
+ 
+
+    </header>
+     
+    <div class="article-meta">
+      <a href="/2020/04/06/lru-lfu-cache/" class="article-date">
+  <time datetime="2020-04-06T11:28:16.000Z" itemprop="datePublished">2020-04-06</time>
+</a> 
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E7%AE%97%E6%B3%95/">算法</a> / <a class="article-category-link" href="/categories/%E7%BC%93%E5%AD%98/">缓存</a>
+  </div>
+  
+<div class="word_count">
+    <span class="post-time">
+        <span class="post-meta-item-icon">
+            <i class="ri-quill-pen-line"></i>
+            <span class="post-meta-item-text"> Word count:</span>
+            <span class="post-count">2.5k</span>
+        </span>
+    </span>
+
+    <span class="post-time">
+        &nbsp; | &nbsp;
+        <span class="post-meta-item-icon">
+            <i class="ri-book-open-line"></i>
+            <span class="post-meta-item-text"> Reading time≈</span>
+            <span class="post-count">11 min</span>
+        </span>
+    </span>
+</div>
+ 
+    </div>
+      
+    <div class="tocbot"></div>
+
+
+
+
+  
+    <div class="article-entry" itemprop="articleBody">
+       
+  <h1 id="常见的缓存算法及动手实现"><a href="#常见的缓存算法及动手实现" class="headerlink" title="常见的缓存算法及动手实现"></a>常见的缓存算法及动手实现</h1><ul>
+<li>FIFO 先进先出 - First In First Out.</li>
+<li>LRU 最近最少使用 - Least Recently Used.</li>
+<li>LFU 最不经常使用 - Least Frequently Used.</li>
+</ul>
+<h3 id="FIFO"><a href="#FIFO" class="headerlink" title="FIFO"></a>FIFO</h3><ul>
+<li>使用队列实现，新增数据从队尾插入，淘汰数据从队头出队。</li>
+</ul>
+<h3 id="LRU"><a href="#LRU" class="headerlink" title="LRU"></a>LRU</h3><h4 id="核心思想是“如果数据最近被访问过，那么将来被访问的几率也更高”"><a href="#核心思想是“如果数据最近被访问过，那么将来被访问的几率也更高”" class="headerlink" title="核心思想是“如果数据最近被访问过，那么将来被访问的几率也更高”"></a>核心思想是“如果数据最近被访问过，那么将来被访问的几率也更高”</h4><h4 id="一个操作demo"><a href="#一个操作demo" class="headerlink" title="一个操作demo"></a>一个操作demo</h4><ol>
+<li><p>LRUCache cache = new LRUCache( 2 /* 缓存容量 */ );</p>
+</li>
+<li><p>cache.put(1, 1);</p>
+</li>
+<li><p>cache.put(2, 2);</p>
+</li>
+<li><p>cache.get(1);       // 返回  1</p>
+</li>
+<li><p>cache.put(3, 3);    // 该操作会使得key=2 作废</p>
+</li>
+<li><p>cache.get(2);       // 返回 -1 (未找到)</p>
+</li>
+<li><p>cache.put(4, 4);    // 该操作会使得key=1 作废</p>
+</li>
+<li><p>cache.get(1);       // 返回 -1 (未找到)</p>
+</li>
+<li><p>cache.get(3);       // 返回  3</p>
+</li>
+<li><p>cache.get(4);       // 返回  4</p>
+</li>
+</ol>
+<h4 id="如何实现这样一个数据结构？一个高效的缓存应该具有以下特点"><a href="#如何实现这样一个数据结构？一个高效的缓存应该具有以下特点" class="headerlink" title="如何实现这样一个数据结构？一个高效的缓存应该具有以下特点"></a>如何实现这样一个数据结构？一个高效的缓存应该具有以下特点</h4><ul>
+<li><p>两个方法put(k,v)和get(k)</p>
+</li>
+<li><p>时间复杂度，空间复杂度越低越好，最好是O(1)</p>
+</li>
+<li><p>需要保存每个元素的访问顺序，每次被访问到，就把元素移动到末尾，这里需要链表结构</p>
+</li>
+<li><p>同时还需要hash结构还保证每次查找的O(1)复杂度</p>
+</li>
+<li><p>所以我们需要的是  HashMap + 链表的结合体，在JAVA恰好有LinkedHashMap这种数据结构</p>
+</li>
+</ul>
+<h4 id="LinkedHashMap源码分析"><a href="#LinkedHashMap源码分析" class="headerlink" title="LinkedHashMap源码分析"></a>LinkedHashMap源码分析</h4><p>在真正动手实现之前我们不妨先看看LinkedHashMap是否满足我们的需求。</p>
+<p>先来看看构造函数</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">LinkedHashMap</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">super</span>();</span><br><span class="line">    accessOrder = <span class="keyword">false</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 这里的 accessOrder 默认是为false，如果要按读取顺序排序需要将其设为 true</span></span><br><span class="line"><span class="comment">// initialCapacity 代表 map 的 容量，loadFactor 代表加载因子 (默认即可)</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">LinkedHashMap</span><span class="params">(<span class="keyword">int</span> initialCapacity, <span class="keyword">float</span> loadFactor, <span class="keyword">boolean</span> accessOrder)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">super</span>(initialCapacity, loadFactor);</span><br><span class="line">    <span class="keyword">this</span>.accessOrder = accessOrder;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>accessOrder决定了链表中结点的排序方式</p>
+<ul>
+<li>false :  按照插入顺序排序</li>
+<li>True：按照读取顺序排序</li>
+</ul>
+<p>显然，这并不满足我们的需求啊，在LRU中插入/读取都算入“访问”的（从上面的demo就可以看出）</p>
+<p>莫方，我们继续看看源码，看看能不能稍加修改为我所用。然后我们就找到了下面三个方法，用于改变结点顺序的。</p>
+<ul>
+<li><strong>void afterNodeRemoval(Node p) { }</strong>  结点删除后，把对应的数据从链表中删除</li>
+<li><strong>void afterNodeAccess(Node p) { }</strong> 其作用就是在访问元素之后，将该元素放到双向链表的尾巴处(只有读操作时才会调用）并且在accessOrder = true才生效~~</li>
+<li><strong>void afterNodeInsertion(boolean evict) { }</strong>  这个貌似是我们的重点啊，我们现在需要的就是把insert也算入“访问”操作，那看看其源码吧</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//evict中文意思驱逐，应该是用来控制是否执行删除的一个因素，通过源码追踪，发现只有readObject反序列化的时候才为false,其他时候都为true,所以可以认为这个值始终为true</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">afterNodeInsertion</span><span class="params">(<span class="keyword">boolean</span> evict)</span> </span>&#123; <span class="comment">// possibly remove eldest</span></span><br><span class="line">        LinkedHashMap.Entry&lt;K,V&gt; first;</span><br><span class="line">        <span class="keyword">if</span> (evict &amp;&amp; (first = head) != <span class="keyword">null</span> &amp;&amp; removeEldestEntry(first)) &#123;</span><br><span class="line">            K key = first.key;</span><br><span class="line">            removeNode(hash(key), key, <span class="keyword">null</span>, <span class="keyword">false</span>, <span class="keyword">true</span>);</span><br><span class="line">        &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后再来看看<code>removeEldestEntry</code>这个方法是有什么用，上源码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"> * &lt;p&gt;This method typically does not modify the map in any way,</span><br><span class="line"> * instead allowing the map to modify itself as directed by its</span><br><span class="line"> * return value.  It &lt;i&gt;is&lt;/i&gt; permitted for this method to modify</span><br><span class="line"> * the map directly, but if it does so, it &lt;i&gt;must&lt;/i&gt; return</span><br><span class="line"> * &#123;<span class="meta">@code</span> <span class="keyword">false</span>&#125; (indicating that the map should not attempt any</span><br><span class="line"> * further modification).  The effects of returning &#123;<span class="meta">@code</span> <span class="keyword">true</span>&#125;</span><br><span class="line"> * after modifying the map from within <span class="keyword">this</span> method are unspecified.</span><br><span class="line"> *</span><br><span class="line"> * &lt;p&gt;This implementation merely returns &#123;<span class="meta">@code</span> <span class="keyword">false</span>&#125; (so that <span class="keyword">this</span></span><br><span class="line"> * map acts like a normal map - the eldest element is never removed).</span><br><span class="line"> *</span><br><span class="line"> * <span class="meta">@param</span>    eldest The least recently inserted entry in the map, or <span class="keyword">if</span></span><br><span class="line"> *           <span class="keyword">this</span> is an access-ordered map, the least recently accessed</span><br><span class="line"> *           entry.  This is the entry that will be removed it <span class="keyword">this</span></span><br><span class="line"> *           method returns &#123;<span class="meta">@code</span> <span class="keyword">true</span>&#125;.  If the map was empty prior</span><br><span class="line"> *           to the &#123;<span class="meta">@code</span> put&#125; or &#123;<span class="meta">@code</span> putAll&#125; invocation resulting</span><br><span class="line"> *           in <span class="keyword">this</span> invocation, <span class="keyword">this</span> will be the entry that was just</span><br><span class="line"> *           inserted; in other words, <span class="keyword">if</span> the map contains a single</span><br><span class="line"> *           entry, the eldest entry is also the newest.</span><br><span class="line"> * <span class="meta">@return</span>   &#123;<span class="meta">@code</span> <span class="keyword">true</span>&#125; <span class="keyword">if</span> the eldest entry should be removed</span><br><span class="line"> *           from the map; &#123;<span class="meta">@code</span> <span class="keyword">false</span>&#125; <span class="keyword">if</span> it should be retained.</span><br><span class="line"> */</span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">removeEldestEntry</span><span class="params">(Map.Entry&lt;K,V&gt; eldest)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<p>函数很简单，但是我特意复制了很长英文注释（保留原汁原味的嘛），意思是这个函数是一个策略函数，用来决定是否移除“最老”的元素，默认是<code>false</code>。而我们要实现LRU，当缓存满的时候，必须要移除最老的元素，也就是队头的元素。所以，Override之</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//简单易懂</span></span><br><span class="line"><span class="meta">@Override</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">removeEldestEntry</span><span class="params">(Map.Entry&lt;Integer, Integer&gt; eldest)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">return</span> size() &gt; capacity; </span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>完整的LRU源码如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LRUCache</span> <span class="keyword">extends</span> <span class="title">LinkedHashMap</span>&lt;<span class="title">Integer</span>, <span class="title">Integer</span>&gt;</span>&#123;</span><br><span class="line">    <span class="comment">//缓存的容量大小</span></span><br><span class="line">  	<span class="keyword">private</span> <span class="keyword">int</span> capacity;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">LRUCache</span><span class="params">(<span class="keyword">int</span> capacity)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">super</span>(capacity, <span class="number">0.75F</span>, <span class="keyword">true</span>);</span><br><span class="line">        <span class="keyword">this</span>.capacity = capacity;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span> </span>&#123;</span><br><span class="line">      	<span class="comment">//如果缓存不存在，返回null或者自定义一个默认值，此处为-1</span></span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">super</span>.getOrDefault(key, -<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// put 操作很简单，直接叫爸爸就完事儿了</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">super</span>.put(key, value);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">removeEldestEntry</span><span class="params">(Map.Entry&lt;Integer, Integer&gt; eldest)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> size() &gt; capacity; </span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>就这？没错，就这么简单，因为你站在了巨人的肩膀上~~，当然你也可以从0开始实现。这里就暂时偷懒，插个眼，想进一步了解，看这里 <a target="_blank" rel="noopener" href="https://leetcode-cn.com/problems/lru-cache/solution/">力扣LRU</a></p>
+<h3 id="LFU"><a href="#LFU" class="headerlink" title="LFU"></a>LFU</h3><ul>
+<li>核心思想是“如果数据过去被访问数次越多，那么将来被访问的频率也更高”。</li>
+</ul>
+<h4 id="如何实现？"><a href="#如何实现？" class="headerlink" title="如何实现？"></a>如何实现？</h4><ul>
+<li>每个元素需要按照访问次数（频率）排序，当缓存满了，移除访问次数最少的那个；</li>
+<li>如果缓存中的访问频率都一样，那就移除最近最少使用的（没错，就变成了LRU了）</li>
+<li>get 方法，需要支持O(1)级别的快速查找，考虑了一下果断hash啊</li>
+<li>put方法，最好也支持O(1)级别的，果断用链表啊</li>
+</ul>
+<h4 id="举个例子"><a href="#举个例子" class="headerlink" title="举个例子"></a>举个例子</h4><p>LFUCache cache = new LFUCache( 2 );  //2为capacity，缓存容量</p>
+<p>cache.put(1, 1);<br>cache.put(2, 2);<br>cache.get(1);       // 返回 1<br>cache.put(3, 3);    // 去除 key 2<br>cache.get(2);       // 返回 -1 (未找到key 2)<br>cache.get(3);       // 返回 3<br>cache.put(4, 4);    // 去除 key 1，此时3和1的访问次数都是2，但1比3来的早。<br>cache.get(1);       // 返回 -1 (未找到 key 1)<br>cache.get(3);       // 返回 3<br>cache.get(4);       // 返回 4</p>
+<h4 id="动手实现"><a href="#动手实现" class="headerlink" title="动手实现"></a>动手实现</h4><p>采用HashMap和 LinkedHashSet强强联合的方式实现。原理可以看下图(引用自<a target="_blank" rel="noopener" href="https://leetcode-cn.com/problems/lfu-cache/solution/ha-xi-biao-shuang-xiang-lian-biao-java-by-liweiwei/">LeetCode题解)</a></p>
+<p><img src="https://pic.leetcode-cn.com/909ea661e76e600e49763d06d2fa72b7897e36ebf47d966292636bce1b241734-image.png"></p>
+<p>从上图可以看出，我们需要啥？假设我们缓存的key,value类型都是Integer</p>
+<ul>
+<li>一个HashMap&lt;Integer,Node&gt; cache;  Node是双向链表的结点类型</li>
+<li>一个HashMap&lt;Integer,LinkedHashSet<Node>&gt; freqMap；一个记录访问次数的 hash表+双向链表结构，这里就使用JAVA自带的  LinkedHashSet。</li>
+<li>新来的结点放在双向链表尾部，所以采用<code>尾插法</code>，没办法，谁让LinkedHashSet尾插效率高呢~~</li>
+</ul>
+<p>首先，定义Node结点结构</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Node</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> key;</span><br><span class="line">    <span class="keyword">int</span> value;</span><br><span class="line">  	<span class="comment">//默认为1</span></span><br><span class="line">    <span class="keyword">int</span> freq = <span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">Node</span><span class="params">()</span> </span>&#123;&#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">Node</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">this</span>.key = key;</span><br><span class="line">        <span class="keyword">this</span>.value = value;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>然后是，LFU类</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">LFUCache</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 缓存map</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> HashMap&lt;Integer,Node&gt; cache;</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">private</span> HashMap&lt;Integer,LinkedHashSet&lt;Node&gt;&gt; freqMap;</span><br><span class="line">  </span><br><span class="line">  	<span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 避免每次都要遍历freqMap，采用全局变量维护一个当前的最小频次</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> minFreq;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 缓存最大容量</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">int</span> capacity;</span><br><span class="line">    </span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">LFUCache</span><span class="params">(<span class="keyword">int</span> capacity)</span></span>&#123;</span><br><span class="line">        <span class="keyword">this</span>.capacity = capacity;</span><br><span class="line">        <span class="keyword">this</span>.cache = <span class="keyword">new</span> HashMap&lt;&gt;();</span><br><span class="line">        <span class="keyword">this</span>.freqMap = <span class="keyword">new</span> HashMap&lt;&gt;();</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key,<span class="keyword">int</span> value)</span></span>&#123;</span><br><span class="line">        <span class="comment">//TODO</span></span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>&#123;</span><br><span class="line">        <span class="comment">//TODO</span></span><br><span class="line">        <span class="keyword">return</span> -<span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>具体的功能需要我们一步一步完善它了。</p>
+<p>首先看看 <code>get</code>方法，这个应该是最简单的。</p>
+<ul>
+<li>根据<code>key</code>从 <code>cache</code>中取出对应的结点Node，<ul>
+<li>如果Node存在，则返回其值，并node.freq++;</li>
+<li>不存在则返回默认值 null ,或者-1(根据业务需求，为了简单这里就 -1吧，实际应该是null,并且结合泛型来做)。</li>
+</ul>
+</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>&#123;</span><br><span class="line">        Node node = <span class="keyword">this</span>.cache.get(key);</span><br><span class="line">        <span class="keyword">if</span>(node != <span class="keyword">null</span>)&#123;</span><br><span class="line">          <span class="comment">//增加此结点的访问次数</span></span><br><span class="line">            <span class="keyword">this</span>.freqIncrement(node);</span><br><span class="line">            <span class="keyword">return</span> node.value;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> -<span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>增加结点的访问次数不仅仅是  <code>node.freq++</code>这么简单，我们要同步更新<code>this.freqMap</code>把Node移动到对应频次（调用次数的）桶里。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 增加结点访问次数</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> node</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">freqIncrement</span><span class="params">(Node node)</span></span>&#123;</span><br><span class="line">        <span class="comment">//找到旧的桶中的结点，并移除</span></span><br><span class="line">        <span class="keyword">int</span> curFreq = node.freq;</span><br><span class="line">        LinkedHashSet&lt;Node&gt; oldSet = <span class="keyword">this</span>.freqMap.get(curFreq);</span><br><span class="line">        oldSet.remove(node);</span><br><span class="line"></span><br><span class="line">        <span class="comment">//如果当前桶移除了node后，已经是个空桶了，那么minFreq就要指向大一号的桶</span></span><br><span class="line">        <span class="keyword">if</span>(curFreq == minFreq &amp;&amp; oldSet.size() == <span class="number">0</span>)&#123;</span><br><span class="line">            minFreq = curFreq + <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">//增加访问次数，并加入新桶的链尾</span></span><br><span class="line">        node.freq++;</span><br><span class="line">        LinkedHashSet&lt;Node&gt; newSet = <span class="keyword">this</span>.freqMap.get(node.freq);</span><br><span class="line">        <span class="keyword">if</span>(newSet == <span class="keyword">null</span>)&#123;</span><br><span class="line">            newSet = <span class="keyword">new</span> LinkedHashSet&lt;&gt;();</span><br><span class="line">            <span class="keyword">this</span>.freqMap.put(node.freq,newSet);</span><br><span class="line">        &#125;</span><br><span class="line">        newSet.add(node);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<p>然后是<code>put</code>方法，这个方法就稍复杂一点了。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key,<span class="keyword">int</span> value)</span></span>&#123;</span><br><span class="line">        <span class="comment">//容量是0，那它可能是个假缓存吧</span></span><br><span class="line">        <span class="keyword">if</span>(<span class="keyword">this</span>.capacity == <span class="number">0</span>)&#123;</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        Node curNode = cache.get(key);</span><br><span class="line">        <span class="comment">//如果缓存已经存在，直接覆盖</span></span><br><span class="line">        <span class="keyword">if</span> (curNode != <span class="keyword">null</span>)&#123;</span><br><span class="line">            curNode.value = value;</span><br><span class="line">            <span class="keyword">this</span>.freqIncrement(curNode);</span><br><span class="line">        &#125;<span class="keyword">else</span>&#123;</span><br><span class="line">            <span class="comment">//缓存容量达到上限了？需要先删除</span></span><br><span class="line">            <span class="keyword">if</span>(<span class="keyword">this</span>.cache.size() == capacity)&#123;</span><br><span class="line">                <span class="comment">//删除第一个</span></span><br><span class="line">                LinkedHashSet&lt;Node&gt; set = <span class="keyword">this</span>.freqMap.get(minFreq);</span><br><span class="line">                Node needRemove = set.iterator().next();</span><br><span class="line">                set.remove(needRemove);</span><br><span class="line">                cache.remove(needRemove);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">//新增</span></span><br><span class="line">            Node newNode = <span class="keyword">new</span> Node(key, value);</span><br><span class="line">            cache.put(key,newNode);</span><br><span class="line">            LinkedHashSet&lt;Node&gt; floorDeq = <span class="keyword">this</span>.freqMap.get(<span class="number">1</span>);</span><br><span class="line">            <span class="keyword">if</span>(floorDeq == <span class="keyword">null</span>)&#123;</span><br><span class="line">                floorDeq = <span class="keyword">new</span> LinkedHashSet&lt;&gt;();</span><br><span class="line">                freqMap.put(<span class="number">1</span>,floorDeq);</span><br><span class="line">            &#125;</span><br><span class="line">            floorDeq.add(newNode);</span><br><span class="line">            <span class="comment">//更新minFreq</span></span><br><span class="line">            minFreq = <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="测试"><a href="#测试" class="headerlink" title="测试"></a>测试</h4><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        LFUCache cache = <span class="keyword">new</span> LFUCache(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">        cache.put(<span class="number">1</span>, <span class="number">1</span>);</span><br><span class="line">        cache.put(<span class="number">2</span>, <span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">        System.out.println(cache.getMap().keySet());</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> res1 = cache.get(<span class="number">1</span>);</span><br><span class="line">        System.out.println(res1);</span><br><span class="line"></span><br><span class="line">        cache.put(<span class="number">3</span>, <span class="number">3</span>);</span><br><span class="line">        System.out.println(cache.getMap().keySet());</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> res2 = cache.get(<span class="number">2</span>);</span><br><span class="line">        System.out.println(res2);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> res3 = cache.get(<span class="number">3</span>);</span><br><span class="line">        System.out.println(res3);</span><br><span class="line"></span><br><span class="line">        cache.put(<span class="number">4</span>, <span class="number">4</span>);</span><br><span class="line">        System.out.println(cache.getMap().keySet());</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> res4 = cache.get(<span class="number">1</span>);</span><br><span class="line">        System.out.println(res4);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> res5 = cache.get(<span class="number">3</span>);</span><br><span class="line">        System.out.println(res5);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> res6 = cache.get(<span class="number">4</span>);</span><br><span class="line">        System.out.println(res6);</span><br><span class="line"></span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+
+
+
+
+<h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><p>为了代码简单，上面能用java提供的集合类都尽量使用了，但是为了效率高，最好的办法是实现一个自己的双端链表来实现，但是生产环境不推荐自己实现LRU,LFU这种，直接用现成的。</p>
+<h4 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h4><ul>
+<li><a target="_blank" rel="noopener" href="https://leetcode-cn.com/problems/lfu-cache/solution/java-13ms-shuang-100-shuang-xiang-lian-biao-duo-ji/">LeetCode-Sweetiee甜姨</a></li>
+<li><a target="_blank" rel="noopener" href="https://leetcode-cn.com/problems/lfu-cache/solution/ha-xi-biao-shuang-xiang-lian-biao-java-by-liweiwei/">LeetCode-liwewei大佬</a></li>
+</ul>
+ 
+      <!-- reward -->
+      
+    </div>
+    
+
+    <!-- copyright -->
+    
+    <div class="declare">
+      <ul class="post-copyright">
+        <li>
+          <i class="ri-copyright-line"></i>
+          <strong>Copyright： </strong>
+          
+          Copyright is owned by the author. For commercial reprints, please contact the author for authorization. For non-commercial reprints, please indicate the source.
+          
+        </li>
+      </ul>
+    </div>
+    
+    <footer class="article-footer">
+       
+<div class="share-btn">
+      <span class="share-sns share-outer">
+        <i class="ri-share-forward-line"></i>
+        分享
+      </span>
+      <div class="share-wrap">
+        <i class="arrow"></i>
+        <div class="share-icons">
+          
+          <a class="weibo share-sns" href="javascript:;" data-type="weibo">
+            <i class="ri-weibo-fill"></i>
+          </a>
+          <a class="weixin share-sns wxFab" href="javascript:;" data-type="weixin">
+            <i class="ri-wechat-fill"></i>
+          </a>
+          <a class="qq share-sns" href="javascript:;" data-type="qq">
+            <i class="ri-qq-fill"></i>
+          </a>
+          <a class="douban share-sns" href="javascript:;" data-type="douban">
+            <i class="ri-douban-line"></i>
+          </a>
+          <!-- <a class="qzone share-sns" href="javascript:;" data-type="qzone">
+            <i class="icon icon-qzone"></i>
+          </a> -->
+          
+          <a class="facebook share-sns" href="javascript:;" data-type="facebook">
+            <i class="ri-facebook-circle-fill"></i>
+          </a>
+          <a class="twitter share-sns" href="javascript:;" data-type="twitter">
+            <i class="ri-twitter-fill"></i>
+          </a>
+          <a class="google share-sns" href="javascript:;" data-type="google">
+            <i class="ri-google-fill"></i>
+          </a>
+        </div>
+      </div>
+</div>
+
+<div class="wx-share-modal">
+    <a class="modal-close" href="javascript:;"><i class="ri-close-circle-line"></i></a>
+    <p>扫一扫，分享到微信</p>
+    <div class="wx-qrcode">
+      <img src="//api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://eqshen.github.io/2020/04/06/lru-lfu-cache/" alt="微信分享二维码">
+    </div>
+</div>
+
+<div id="share-mask"></div>  
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/FIFO/" rel="tag">FIFO</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LFU/" rel="tag">LFU</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LRU/" rel="tag">LRU</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%BC%93%E5%AD%98/" rel="tag">缓存</a></li></ul>
+
+    </footer>
+  </div>
+
+   
+  <nav class="article-nav">
+    
+      <a href="/2020/04/11/http-thread-block-problem/" class="article-nav-link">
+        <strong class="article-nav-caption">上一篇</strong>
+        <div class="article-nav-title">
+          
+            一次Http未设置超时导致的线程假死阻塞
+          
+        </div>
+      </a>
+    
+    
+      <a href="/2020/03/22/construction-guide/" class="article-nav-link">
+        <strong class="article-nav-caption">下一篇</strong>
+        <div class="article-nav-title">本博客构建指南</div>
+      </a>
+    
+  </nav>
+
+  
+   
+<div class="gitalk" id="gitalk-container"></div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.css">
+
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+
+<script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '56d2807240bc8e3190df',
+    clientSecret: '12d63223bc32c274131984657c437330f13c8ff2',
+    repo: 'eqshen.github.io',
+    owner: 'eqshen',
+    admin: ['eqshen'],
+    // id: location.pathname,      // Ensure uniqueness and length less than 50
+    id: md5(location.pathname),
+    distractionFreeMode: false,  // Facebook-like distraction free mode
+    pagerDirection: 'last'
+  })
+
+  gitalk.render('gitalk-container')
+</script>
+  
+</article>
+
+</section>
+      <footer class="footer">
+  <div class="outer">
+    <ul>
+      <li>
+        Copyrights &copy;
+        2020-2022
+        <i class="ri-heart-fill heart_icon"></i> EQShen
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        
+        Powered by <a href="https://hexo.io" target="_blank">Hexo</a>
+        <span class="division">|</span>
+        Theme - <a href="https://github.com/Shen-Yu/hexo-theme-ayer" target="_blank">Ayer</a>
+        
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        <span>
+  <span><i class="ri-user-3-fill"></i>Visitors:<span id="busuanzi_value_site_uv"></span></s>
+  <span class="division">|</span>
+  <span><i class="ri-eye-fill"></i>Views:<span id="busuanzi_value_page_pv"></span></span>
+</span>
+        
+      </li>
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      <li>
+        <!-- cnzz统计 -->
+        
+      </li>
+    </ul>
+  </div>
+</footer>
+      <div class="float_btns">
+        <div class="totop" id="totop">
+  <i class="ri-arrow-up-line"></i>
+</div>
+
+<div class="todark" id="todark">
+  <i class="ri-moon-line"></i>
+</div>
+
+      </div>
+    </main>
+    <aside class="sidebar on">
+      <button class="navbar-toggle"></button>
+<nav class="navbar">
+  
+  <div class="logo">
+    <a href="/"><img src="/images/ayer-side.svg" alt="EQShen"></a>
+  </div>
+  
+  <ul class="nav nav-main">
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/">主页</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/archives">归档</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/categories">分类</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/tags">标签</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/friends">友链</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2020/03/22/sys-aboutMe">关于我</a>
+    </li>
+    
+  </ul>
+</nav>
+<nav class="navbar navbar-bottom">
+  <ul class="nav">
+    <li class="nav-item">
+      
+      <a class="nav-item-link nav-item-search"  title="Search">
+        <i class="ri-search-line"></i>
+      </a>
+      
+      
+      <a class="nav-item-link" target="_blank" href="/atom.xml" title="RSS Feed">
+        <i class="ri-rss-line"></i>
+      </a>
+      
+    </li>
+  </ul>
+</nav>
+<div class="search-form-wrap">
+  <div class="local-search local-search-plugin">
+  <input type="search" id="local-search-input" class="local-search-input" placeholder="Search...">
+  <div id="local-search-result" class="local-search-result"></div>
+</div>
+</div>
+    </aside>
+    <script>
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        document.querySelector('.content').classList.remove('on');
+        document.querySelector('.sidebar').classList.remove('on');
+      }
+    </script>
+    <div id="mask"></div>
+
+<!-- #reward -->
+<div id="reward">
+  <span class="close"><i class="ri-close-line"></i></span>
+  <p class="reward-p"><i class="ri-cup-line"></i>请我喝杯咖啡吧~</p>
+  <div class="reward-box">
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/alipay.jpg">
+      <span class="reward-type">支付宝</span>
+    </div>
+    
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/wechat.jpg">
+      <span class="reward-type">微信</span>
+    </div>
+    
+  </div>
+</div>
+    
+<script src="/js/jquery-2.0.3.min.js"></script>
+
+
+<script src="/js/lazyload.min.js"></script>
+
+<!-- Tocbot -->
+
+
+<script src="/js/tocbot.min.js"></script>
+
+<script>
+  tocbot.init({
+    tocSelector: '.tocbot',
+    contentSelector: '.article-entry',
+    headingSelector: 'h1, h2, h3, h4, h5, h6',
+    hasInnerContainers: true,
+    scrollSmooth: true,
+    scrollContainer: 'main',
+    positionFixedSelector: '.tocbot',
+    positionFixedClass: 'is-position-fixed',
+    fixedSidebarOffset: 'auto'
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.css">
+<script src="https://cdn.jsdelivr.net/npm/justifiedGallery@3.7.0/dist/js/jquery.justifiedGallery.min.js"></script>
+
+<script src="/dist/main.js"></script>
+
+<!-- ImageViewer -->
+
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe. 
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" style="display:none" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css">
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+
+<script>
+    function viewer_init() {
+        let pswpElement = document.querySelectorAll('.pswp')[0];
+        let $imgArr = document.querySelectorAll(('.article-entry img:not(.reward-img)'))
+
+        $imgArr.forEach(($em, i) => {
+            $em.onclick = () => {
+                // slider展开状态
+                // todo: 这样不好，后面改成状态
+                if (document.querySelector('.left-col.show')) return
+                let items = []
+                $imgArr.forEach(($em2, i2) => {
+                    let img = $em2.getAttribute('data-idx', i2)
+                    let src = $em2.getAttribute('data-target') || $em2.getAttribute('src')
+                    let title = $em2.getAttribute('alt')
+                    // 获得原图尺寸
+                    const image = new Image()
+                    image.src = src
+                    items.push({
+                        src: src,
+                        w: image.width || $em2.width,
+                        h: image.height || $em2.height,
+                        title: title
+                    })
+                })
+                var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, items, {
+                    index: parseInt(i)
+                });
+                gallery.init()
+            }
+        })
+    }
+    viewer_init()
+</script>
+
+<!-- MathJax -->
+
+<!-- Katex -->
+
+<!-- busuanzi  -->
+
+
+<script src="/js/busuanzi-2.3.pure.min.js"></script>
+
+
+<!-- ClickLove -->
+
+
+<script src="/js/clickLove.js"></script>
+
+
+<!-- ClickBoom1 -->
+
+<!-- ClickBoom2 -->
+
+<!-- CodeCopy -->
+
+
+<link rel="stylesheet" href="/css/clipboard.css">
+
+<script src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js"></script>
+<script>
+  function wait(callback, seconds) {
+    var timelag = null;
+    timelag = window.setTimeout(callback, seconds);
+  }
+  !function (e, t, a) {
+    var initCopyCode = function(){
+      var copyHtml = '';
+      copyHtml += '<button class="btn-copy" data-clipboard-snippet="">';
+      copyHtml += '<i class="ri-file-copy-2-line"></i><span>COPY</span>';
+      copyHtml += '</button>';
+      $(".highlight .code pre").before(copyHtml);
+      $(".article pre code").before(copyHtml);
+      var clipboard = new ClipboardJS('.btn-copy', {
+        target: function(trigger) {
+          return trigger.nextElementSibling;
+        }
+      });
+      clipboard.on('success', function(e) {
+        let $btn = $(e.trigger);
+        $btn.addClass('copied');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-checkbox-circle-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPIED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-checkbox-circle-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+      clipboard.on('error', function(e) {
+        e.clearSelection();
+        let $btn = $(e.trigger);
+        $btn.addClass('copy-failed');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-time-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPY FAILED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-time-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+    }
+    initCopyCode();
+  }(window, document);
+</script>
+
+
+<!-- CanvasBackground -->
+
+
+    
+  </div>
+</body>
+
+</html>

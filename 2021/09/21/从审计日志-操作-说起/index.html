@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+
+
+<html lang="en">
+
+
+<head>
+  <meta charset="utf-8" />
+   
+  <meta name="keywords" content="eqshen，EQShen，blog，博客，代码，Java，生活" />
+   
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+    从审计日志(操作日志)说起 |  
+  </title>
+  <meta name="generator" content="hexo-theme-ayer">
+  
+  <link rel="shortcut icon" href="/favicon.ico" />
+  
+  
+<link rel="stylesheet" href="/dist/main.css">
+
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/css/remixicon.min.css">
+
+  
+<link rel="stylesheet" href="/css/custom.css">
+
+  
+  
+<script src="https://cdn.jsdelivr.net/npm/pace-js@1.0.2/pace.min.js"></script>
+
+  
+  
+
+  
+<script>
+var _hmt = _hmt || [];
+(function() {
+	var hm = document.createElement("script");
+	hm.src = "https://hm.baidu.com/hm.js?b08c3d22efe208ff89944223bdab1f33";
+	var s = document.getElementsByTagName("script")[0]; 
+	s.parentNode.insertBefore(hm, s);
+})();
+</script>
+
+
+<link rel="alternate" href="/atom.xml" title="EQShen" type="application/atom+xml">
+</head>
+
+</html>
+
+<body>
+  <div id="app">
+    
+      
+    <main class="content on">
+      <section class="outer">
+  <article
+  id="post-从审计日志-操作-说起"
+  class="article article-type-post"
+  itemscope
+  itemprop="blogPost"
+  data-scroll-reveal
+>
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h1 class="article-title sea-center" style="border-left:0" itemprop="name">
+  从审计日志(操作日志)说起
+</h1>
+ 
+
+    </header>
+     
+    <div class="article-meta">
+      <a href="/2021/09/21/%E4%BB%8E%E5%AE%A1%E8%AE%A1%E6%97%A5%E5%BF%97-%E6%93%8D%E4%BD%9C-%E8%AF%B4%E8%B5%B7/" class="article-date">
+  <time datetime="2021-09-21T04:42:08.000Z" itemprop="datePublished">2021-09-21</time>
+</a>   
+<div class="word_count">
+    <span class="post-time">
+        <span class="post-meta-item-icon">
+            <i class="ri-quill-pen-line"></i>
+            <span class="post-meta-item-text"> Word count:</span>
+            <span class="post-count">2.1k</span>
+        </span>
+    </span>
+
+    <span class="post-time">
+        &nbsp; | &nbsp;
+        <span class="post-meta-item-icon">
+            <i class="ri-book-open-line"></i>
+            <span class="post-meta-item-text"> Reading time≈</span>
+            <span class="post-count">10 min</span>
+        </span>
+    </span>
+</div>
+ 
+    </div>
+      
+    <div class="tocbot"></div>
+
+
+
+
+  
+    <div class="article-entry" itemprop="articleBody">
+       
+  <h3 id="从审计日志-操作日志-说起"><a href="#从审计日志-操作日志-说起" class="headerlink" title="从审计日志(操作日志)说起"></a>从审计日志(操作日志)说起</h3><p>时隔一年，偷懒了一年，再次开始写日志，补补技术债</p>
+<h4 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h4><p>在公司日常的开发中，经常会遇到记录操作（审计）日志的情况，格式像这样：<code>法外狂人张三 修改了 xxx配置，从 123 修改为 456，影响 1 行</code>。如果一个项目中crud的接口比较少，那我们完全可以在 接口中硬编码，这中方式也是最直接最快的方式，但是对于一个追求完美的“技术癖”来说，还是存在以下担忧的地方</p>
+<ul>
+<li>接口可能不是同一个人开发，日志的格式如何统一？模板方法？</li>
+<li>后续修改，每个地方都要修改，工作量就比较大，不好维护</li>
+<li>通用逻辑植入业务代码，很不爽</li>
+<li>每个接口入参和出参格式不一样，如何从中提取参数信息？</li>
+</ul>
+<h4 id="具体需求举例"><a href="#具体需求举例" class="headerlink" title="具体需求举例"></a>具体需求举例</h4><p>各个业务需要统一将操作日志记录并统一上报，上报的报文要包含以下内容：</p>
+<ul>
+<li>操作人  : 操作人的userId</li>
+<li>操作时间：2021年09月21日14:31:34</li>
+<li>操作类型：C - 增加，R - 读，U - 更新，D - 删除</li>
+<li>操作对象：如 orderNo , userId</li>
+<li>影响行数：22</li>
+</ul>
+<p>其中影响行数，在读取的情况下指读取的行数，写的情况下指影响的行数，这些都是要根据具体的业务逻辑来确定的，无法抽象共用</p>
+<p>| 以上就是一个具体的需求内容简化，接下来就是方案设计了。</p>
+<h4 id="常见的解决方案"><a href="#常见的解决方案" class="headerlink" title="常见的解决方案"></a>常见的解决方案</h4><ol>
+<li><p>从数据层面入手，订阅数据库Binlog<br> 简单来说，就是通过Canal订阅MySQL的binlog, 这样每次就能知道哪张表、哪行被修改了。</p>
+<ul>
+<li>好处：直接和业务逻辑解耦</li>
+<li>缺点：复杂的业务逻辑无法表现出来，如果一个接口中修改了很多接口，甚至还有RPC调用，这种情况下就不太实用这种方案了。</li>
+</ul>
+</li>
+<li><p>定义类似LogUtil一样的工具类，抽象入参，在工具类中实现模板化，在需要记录日志的地方调用工具类</p>
+<p> 这种方式也是比较容易想到，而且是比较简单的实现。</p>
+</li>
+<li><p>自定义注解 + Aop + SpEL实现解耦</p>
+<p> 这种方法就是我们要实现的方式了，要做一个有追求的<code>新时代农民工</code>。</p>
+</li>
+</ol>
+<h4 id="具体实现"><a href="#具体实现" class="headerlink" title="具体实现"></a>具体实现</h4><ol>
+<li>首先定义注解<br>用于在controller方法上进行标记，并提供切面标记</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">@Target(ElementType.METHOD)</span><br><span class="line">@Retention(RetentionPolicy.RUNTIME)</span><br><span class="line">@Documented</span><br><span class="line">@Inherited</span><br><span class="line">public @interface AuditLog &#123;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 操作类型</span><br><span class="line">     * @return</span><br><span class="line">     *&#x2F;</span><br><span class="line">    OperateType operateType();</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 操作对象表达式</span><br><span class="line">     * @return</span><br><span class="line">     *&#x2F;</span><br><span class="line">    String opTargetEL();</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 影响行数表达式</span><br><span class="line">     * @return</span><br><span class="line">     *&#x2F;</span><br><span class="line">    String effectRowsEL();</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>定义使用到的实体类</li>
+</ol>
+<p>用于存储 AuditLog 在aop过程中所需要的中间过程数据</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">&#x2F;**</span><br><span class="line"> * 存储切面过程中一些元数据</span><br><span class="line"> *&#x2F;</span><br><span class="line">@Data</span><br><span class="line">public class AuditLogAopMetaDTO &#123;</span><br><span class="line">    private HttpServletRequest httpServletRequest;</span><br><span class="line"></span><br><span class="line">    private AuditLog auditLog;</span><br><span class="line"></span><br><span class="line">    private String httpMethodType;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * Get请求参数</span><br><span class="line">     *&#x2F;</span><br><span class="line">    private Map&lt;String,Object&gt; reqParam;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * Post请求参数</span><br><span class="line">     *&#x2F;</span><br><span class="line">    private Object postParam;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>用于存储最终的操作日志结果</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">&#x2F;**</span><br><span class="line"> * 操作日志对象</span><br><span class="line"> *&#x2F;</span><br><span class="line">@Data</span><br><span class="line">public class AuditLogDTO &#123;</span><br><span class="line"></span><br><span class="line">    private LocalDateTime opTime;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * @see com.eqshen.auditlogstarter.enums.OperateType</span><br><span class="line">     *&#x2F;</span><br><span class="line">    private String operateType;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 操作人账号或id</span><br><span class="line">     *&#x2F;</span><br><span class="line">    private String opAccount;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 操作对象，如 订单号，用户id等</span><br><span class="line">     *&#x2F;</span><br><span class="line">    private String opTarget;</span><br><span class="line"></span><br><span class="line">    &#x2F;**</span><br><span class="line">     * 操作结果，影响行数等</span><br><span class="line">     *&#x2F;</span><br><span class="line">    private String opResult;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<ol start="3">
+<li>定义切面处理类</li>
+</ol>
+<p>这里是主要的逻辑, 代码不复杂。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br></pre></td><td class="code"><pre><span class="line">@Aspect</span><br><span class="line">@Component</span><br><span class="line">@Slf4j</span><br><span class="line">public class AuditLogInterceptor &#123;</span><br><span class="line"></span><br><span class="line">    @Pointcut(&quot;@annotation(com.eqshen.auditlogstarter.annotation.AuditLog)&quot;)</span><br><span class="line">    public void pointcut()&#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    @Around(&quot;pointcut()&quot;)</span><br><span class="line">    public Object around(ProceedingJoinPoint point) throws Throwable &#123;</span><br><span class="line"></span><br><span class="line">        Object result &#x3D; null;</span><br><span class="line">        final AuditLogDTO auditLogDTO;</span><br><span class="line">        final AuditLogAopMetaDTO auditLogAopMetaDTO &#x3D; this.beforeProcess(point);</span><br><span class="line"></span><br><span class="line">        try&#123;</span><br><span class="line">            result &#x3D; point.proceed();</span><br><span class="line">        &#125;finally &#123;</span><br><span class="line">            auditLogDTO &#x3D; this.afterProcess(auditLogAopMetaDTO, result);</span><br><span class="line"></span><br><span class="line">            &#x2F;&#x2F;异步推送kafka</span><br><span class="line">            this.asyncSendToKafka(auditLogDTO);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        return result;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    private AuditLogAopMetaDTO beforeProcess(ProceedingJoinPoint point)&#123;</span><br><span class="line">        AuditLogAopMetaDTO auditLogAopMetaDTO &#x3D; new AuditLogAopMetaDTO();</span><br><span class="line">        try&#123;</span><br><span class="line">            RequestAttributes ra &#x3D; RequestContextHolder.getRequestAttributes();</span><br><span class="line">            ServletRequestAttributes sra &#x3D; (ServletRequestAttributes) ra;</span><br><span class="line">            if (sra &#x3D;&#x3D; null) return null;</span><br><span class="line"></span><br><span class="line">            final HttpServletRequest request &#x3D; sra.getRequest();</span><br><span class="line"></span><br><span class="line">            String methodType &#x3D; request.getMethod();;</span><br><span class="line">            Method method &#x3D; AopUtil.getMethod(point);</span><br><span class="line">            AuditLog auditLog &#x3D; method.getAnnotation(AuditLog.class);</span><br><span class="line"></span><br><span class="line">            auditLogAopMetaDTO.setAuditLog(auditLog);</span><br><span class="line">            auditLogAopMetaDTO.setHttpMethodType(methodType);</span><br><span class="line">            auditLogAopMetaDTO.setHttpServletRequest(request);</span><br><span class="line">            auditLogAopMetaDTO.setReqParam(AopUtil.getParamsNameAndValue(point));</span><br><span class="line">            auditLogAopMetaDTO.setPostParam(AopUtil.getPostParam(point));</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">        &#125;catch (Exception e)&#123;</span><br><span class="line">            log.error(&quot;预处理失败&quot;,e);</span><br><span class="line">        &#125;</span><br><span class="line">        return auditLogAopMetaDTO;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    private AuditLogDTO afterProcess(AuditLogAopMetaDTO aopMeta, Object result)&#123;</span><br><span class="line">        if(aopMeta &#x3D;&#x3D; null)&#123;</span><br><span class="line">            return null;</span><br><span class="line">        &#125;</span><br><span class="line">        final AuditLog auditLog &#x3D; aopMeta.getAuditLog();</span><br><span class="line"></span><br><span class="line">        Object opTarget &#x3D; SpELUtil.explainEl(aopMeta.getPostParam(),auditLog.opTargetEL());</span><br><span class="line"></span><br><span class="line">        if(opTarget &#x3D;&#x3D; null)&#123;</span><br><span class="line">            opTarget &#x3D; SpELUtil.explainEl(aopMeta.getReqParam(),auditLog.opTargetEL());</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        String effectRows &#x3D; String.valueOf(SpELUtil.explainEl(result,auditLog.effectRowsEL()));</span><br><span class="line"></span><br><span class="line">        AuditLogDTO auditLogDTO &#x3D; new AuditLogDTO();</span><br><span class="line">        auditLogDTO.setOpTime(LocalDateTime.now());</span><br><span class="line">        auditLogDTO.setOperateType(auditLogDTO.getOperateType());</span><br><span class="line">        auditLogDTO.setOpAccount(null);&#x2F;&#x2F;一般从Context中获取当前登录的用户信息</span><br><span class="line">        auditLogDTO.setOpResult(effectRows);</span><br><span class="line">        auditLogDTO.setOpTarget(String.valueOf(opTarget&#x3D;&#x3D;null?&quot;&quot;:opTarget));</span><br><span class="line"></span><br><span class="line">        return auditLogDTO;</span><br><span class="line"></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    private void asyncSendToKafka(AuditLogDTO auditLogDTO)&#123;</span><br><span class="line">        if(auditLogDTO &#x3D;&#x3D; null) return;</span><br><span class="line">        &#x2F;&#x2F;推荐使用线程数池操作,此处仅输出日志</span><br><span class="line">        log.info(&quot;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&gt; 操作日志：&#123;&#125;&quot;, JSONObject.toJSONString(auditLogDTO));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>其中的一个 SpELUtil工具类是用来解析spel表达式的，也很简单</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">@Slf4j</span><br><span class="line">public class SpELUtil &#123;</span><br><span class="line">    &#x2F;&#x2F;thread-safe</span><br><span class="line">    private static final SpelExpressionParser parser &#x3D; new SpelExpressionParser();</span><br><span class="line"></span><br><span class="line">    private static final TemplateParserContext parserContext &#x3D; new TemplateParserContext(&quot;#&#123;&quot;, &quot;&#125;&quot;);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    public static Object explainEl(Object obj, String spELExpression)&#123;</span><br><span class="line">        if (StringUtils.isEmpty(spELExpression) || obj &#x3D;&#x3D; null) &#123;</span><br><span class="line">            return null;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        try &#123;</span><br><span class="line">            &#x2F;&#x2F; spring的表达式上下文对象</span><br><span class="line">            StandardEvaluationContext context &#x3D; new StandardEvaluationContext();</span><br><span class="line">            context.addPropertyAccessor(new MapAccessor());&#x2F;&#x2F;增加对map的访问支持</span><br><span class="line">            context.setRootObject(obj);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">            Expression expression &#x3D; parser.parseExpression(spELExpression, parserContext);</span><br><span class="line">            return expression.getValue(context);</span><br><span class="line">        &#125; catch (Exception e) &#123;</span><br><span class="line">            log.error(&quot;SpEL解析失败, 表达式: &#123;&#125;, 输入: &#123;&#125;&quot;, spELExpression, JSONObject.toJSONString(obj), e);</span><br><span class="line">        &#125;</span><br><span class="line">        return null;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ol start="4">
+<li>测试<br>定义TestController，简单演示如何使用</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line">@RestController</span><br><span class="line">public class TestController &#123;</span><br><span class="line"></span><br><span class="line">    @GetMapping(&quot;&#x2F;listUsers&quot;)</span><br><span class="line">    @AuditLog(opTargetEL &#x3D; &quot;&quot;,operateType &#x3D; OperateType.READ,effectRowsEL &#x3D; &quot;#&#123;data.size()&#125;&quot;)</span><br><span class="line">    public JSONObject queryUserList()&#123;</span><br><span class="line">        JSONObject resp &#x3D; new JSONObject();</span><br><span class="line">        resp.put(&quot;code&quot;,200);</span><br><span class="line">        resp.put(&quot;msg&quot;,&quot;success&quot;);</span><br><span class="line"></span><br><span class="line">        List&lt;UserInfo&gt; userList &#x3D; new ArrayList&lt;&gt;();</span><br><span class="line">        userList.add(new UserInfo(&quot;u-007&quot;,&quot;张三&quot;,2,&quot;17621345678&quot;));</span><br><span class="line">        userList.add(new UserInfo(&quot;u-001&quot;,&quot;李四&quot;,3,&quot;17621345679&quot;));</span><br><span class="line"></span><br><span class="line">        resp.put(&quot;data&quot;,userList);</span><br><span class="line">        return resp;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    @GetMapping(&quot;&#x2F;getUserInfo&quot;)</span><br><span class="line">    @AuditLog(operateType &#x3D; OperateType.READ,</span><br><span class="line">            opTargetEL &#x3D; &quot;查询用户信息：#&#123;userId&#125;&quot;,</span><br><span class="line">            effectRowsEL &#x3D; &quot;#&#123;data &#x3D;&#x3D; null?0:1&#125;&quot;)</span><br><span class="line">    public JSONObject getUser(String userId)&#123;</span><br><span class="line">        JSONObject resp &#x3D; new JSONObject();</span><br><span class="line">        resp.put(&quot;code&quot;,200);</span><br><span class="line">        resp.put(&quot;msg&quot;,&quot;success&quot;);</span><br><span class="line">        resp.put(&quot;data&quot;,new UserInfo(&quot;u-007&quot;,&quot;张三&quot;,2,&quot;17621345678&quot;));</span><br><span class="line"></span><br><span class="line">        return resp;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    @PostMapping(&quot;&#x2F;operateUser&quot;)</span><br><span class="line">    @AuditLog(operateType &#x3D; OperateType.UPDATE,</span><br><span class="line">            opTargetEL &#x3D; &quot;用户id: #&#123;userId&#125;&quot;, &#x2F;&#x2F;必须跟 userInfo对象中的属性名称一致</span><br><span class="line">            effectRowsEL &#x3D; &quot;#&#123;code &#x3D;&#x3D; 200?1:0&#125;&quot;)</span><br><span class="line">    public JSONObject operateUser(@RequestBody UserInfo userInfo)&#123;</span><br><span class="line"></span><br><span class="line">        &#x2F;&#x2F;用于测试异常情况</span><br><span class="line">        if(Objects.equals(userInfo.getUserId(), &quot;1234&quot;))&#123;</span><br><span class="line">            throw new RuntimeException(&quot;用户不存在&quot;);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        JSONObject resp &#x3D; new JSONObject();</span><br><span class="line">        resp.put(&quot;code&quot;,200);</span><br><span class="line">        resp.put(&quot;msg&quot;,&quot;success&quot;);</span><br><span class="line">        return resp;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>测试1<br>请求及返回：<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line">GET http:&#x2F;&#x2F;localhost:8080&#x2F;listUsers</span><br><span class="line"></span><br><span class="line">HTTP&#x2F;1.1 200 </span><br><span class="line">Content-Type: application&#x2F;json</span><br><span class="line">Transfer-Encoding: chunked</span><br><span class="line">Date: Sat, 25 Sep 2021 09:10:57 GMT</span><br><span class="line">Keep-Alive: timeout&#x3D;60</span><br><span class="line">Connection: keep-alive</span><br><span class="line"></span><br><span class="line">&#123;</span><br><span class="line">  &quot;msg&quot;: &quot;success&quot;,</span><br><span class="line">  &quot;code&quot;: 200,</span><br><span class="line">  &quot;data&quot;: [</span><br><span class="line">    &#123;</span><br><span class="line">      &quot;userId&quot;: &quot;u-007&quot;,</span><br><span class="line">      &quot;name&quot;: &quot;张三&quot;,</span><br><span class="line">      &quot;level&quot;: 2,</span><br><span class="line">      &quot;mobile&quot;: &quot;17621345678&quot;</span><br><span class="line">    &#125;,</span><br><span class="line">    &#123;</span><br><span class="line">      &quot;userId&quot;: &quot;u-001&quot;,</span><br><span class="line">      &quot;name&quot;: &quot;李四&quot;,</span><br><span class="line">      &quot;level&quot;: 3,</span><br><span class="line">      &quot;mobile&quot;: &quot;17621345679&quot;</span><br><span class="line">    &#125;</span><br><span class="line">  ]</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+</li>
+</ul>
+<p>日志输出：<br><code>======&gt; 操作日志：&#123;&quot;opResult&quot;:&quot;2&quot;,&quot;opTarget&quot;:&quot;&quot;,&quot;opTime&quot;:&quot;2021-09-25T17:07:38.093127000&quot;&#125; </code></p>
+<ul>
+<li>测试2<br>请求及返回： <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">GET http:&#x2F;&#x2F;localhost:8080&#x2F;getUserInfo?userId&#x3D;1234</span><br><span class="line"></span><br><span class="line">HTTP&#x2F;1.1 200 </span><br><span class="line">Content-Type: application&#x2F;json</span><br><span class="line">Transfer-Encoding: chunked</span><br><span class="line">Date: Sat, 25 Sep 2021 09:09:11 GMT</span><br><span class="line">Keep-Alive: timeout&#x3D;60</span><br><span class="line">Connection: keep-alive</span><br><span class="line"></span><br><span class="line">&#123;</span><br><span class="line">  &quot;msg&quot;: &quot;success&quot;,</span><br><span class="line">  &quot;code&quot;: 200,</span><br><span class="line">  &quot;data&quot;: &#123;</span><br><span class="line">    &quot;userId&quot;: &quot;u-007&quot;,</span><br><span class="line">    &quot;name&quot;: &quot;张三&quot;,</span><br><span class="line">    &quot;level&quot;: 2,</span><br><span class="line">    &quot;mobile&quot;: &quot;17621345678&quot;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+</li>
+</ul>
+<p>日志输出：<br><code>======&gt; 操作日志：&#123;&quot;opResult&quot;:&quot;1&quot;,&quot;opTarget&quot;:&quot;查询用户信息：1234&quot;,&quot;opTime&quot;:&quot;2021-09-25T17:11:40.489187000&quot;&#125; </code></p>
+<ul>
+<li>测试3<br>请求及返回：<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">POST http:&#x2F;&#x2F;localhost:8080&#x2F;operateUser</span><br><span class="line"></span><br><span class="line">HTTP&#x2F;1.1 200 </span><br><span class="line">Content-Type: application&#x2F;json</span><br><span class="line">Transfer-Encoding: chunked</span><br><span class="line">Date: Sat, 25 Sep 2021 09:12:49 GMT</span><br><span class="line">Keep-Alive: timeout&#x3D;60</span><br><span class="line">Connection: keep-alive</span><br><span class="line"></span><br><span class="line">&#123;</span><br><span class="line">  &quot;msg&quot;: &quot;success&quot;,</span><br><span class="line">  &quot;code&quot;: 200</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+</li>
+</ul>
+<p>日志输出：<br><code>======&gt; 操作日志：&#123;&quot;opResult&quot;:&quot;1&quot;,&quot;opTarget&quot;:&quot;用户id: 12345&quot;,&quot;opTime&quot;:&quot;2021-09-25T17:13:47.193806000&quot;&#125; </code></p>
+<h4 id="补充"><a href="#补充" class="headerlink" title="补充"></a>补充</h4><ol>
+<li>关于SpEL的语法可以去看Spring官方文档<ul>
+<li><a target="_blank" rel="noopener" href="http://itmyhome.com/spring/expressions.html">http://itmyhome.com/spring/expressions.html</a></li>
+<li><a target="_blank" rel="noopener" href="https://docs.spring.io/spring-framework/docs/3.2.x/spring-framework-reference/html/expressions.html">https://docs.spring.io/spring-framework/docs/3.2.x/spring-framework-reference/html/expressions.html</a></li>
+</ul>
+</li>
+</ol>
+<ol start="2">
+<li><p>完整仓库地址</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/eqshen/audit-log-starter">https://github.com/eqshen/audit-log-starter</a></li>
+</ul>
+</li>
+</ol>
+ 
+      <!-- reward -->
+      
+    </div>
+    
+
+    <!-- copyright -->
+    
+    <div class="declare">
+      <ul class="post-copyright">
+        <li>
+          <i class="ri-copyright-line"></i>
+          <strong>Copyright： </strong>
+          
+          Copyright is owned by the author. For commercial reprints, please contact the author for authorization. For non-commercial reprints, please indicate the source.
+          
+        </li>
+      </ul>
+    </div>
+    
+    <footer class="article-footer">
+       
+<div class="share-btn">
+      <span class="share-sns share-outer">
+        <i class="ri-share-forward-line"></i>
+        分享
+      </span>
+      <div class="share-wrap">
+        <i class="arrow"></i>
+        <div class="share-icons">
+          
+          <a class="weibo share-sns" href="javascript:;" data-type="weibo">
+            <i class="ri-weibo-fill"></i>
+          </a>
+          <a class="weixin share-sns wxFab" href="javascript:;" data-type="weixin">
+            <i class="ri-wechat-fill"></i>
+          </a>
+          <a class="qq share-sns" href="javascript:;" data-type="qq">
+            <i class="ri-qq-fill"></i>
+          </a>
+          <a class="douban share-sns" href="javascript:;" data-type="douban">
+            <i class="ri-douban-line"></i>
+          </a>
+          <!-- <a class="qzone share-sns" href="javascript:;" data-type="qzone">
+            <i class="icon icon-qzone"></i>
+          </a> -->
+          
+          <a class="facebook share-sns" href="javascript:;" data-type="facebook">
+            <i class="ri-facebook-circle-fill"></i>
+          </a>
+          <a class="twitter share-sns" href="javascript:;" data-type="twitter">
+            <i class="ri-twitter-fill"></i>
+          </a>
+          <a class="google share-sns" href="javascript:;" data-type="google">
+            <i class="ri-google-fill"></i>
+          </a>
+        </div>
+      </div>
+</div>
+
+<div class="wx-share-modal">
+    <a class="modal-close" href="javascript:;"><i class="ri-close-circle-line"></i></a>
+    <p>扫一扫，分享到微信</p>
+    <div class="wx-qrcode">
+      <img src="//api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://eqshen.github.io/2021/09/21/%E4%BB%8E%E5%AE%A1%E8%AE%A1%E6%97%A5%E5%BF%97-%E6%93%8D%E4%BD%9C-%E8%AF%B4%E8%B5%B7/" alt="微信分享二维码">
+    </div>
+</div>
+
+<div id="share-mask"></div>  
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li></ul>
+
+    </footer>
+  </div>
+
+   
+  <nav class="article-nav">
+    
+      <a href="/2022/01/09/%E6%8F%92%E4%BB%B6%E9%9B%86%E6%88%90-%E7%B1%BB%E5%8A%A0%E8%BD%BD%E7%AE%80%E5%8D%95%E5%AE%9E%E8%B7%B5%E5%8F%8A%E8%B8%A9%E5%9D%91/" class="article-nav-link">
+        <strong class="article-nav-caption">上一篇</strong>
+        <div class="article-nav-title">
+          
+            插件集成-类加载简单实践及踩坑
+          
+        </div>
+      </a>
+    
+    
+      <a href="/2020/11/02/ShardingSphere%E5%88%86%E5%BA%93%E5%88%86%E8%A1%A8%E4%BD%93%E9%AA%8C/" class="article-nav-link">
+        <strong class="article-nav-caption">下一篇</strong>
+        <div class="article-nav-title">ShardingSphere分库分表体验</div>
+      </a>
+    
+  </nav>
+
+  
+   
+<div class="gitalk" id="gitalk-container"></div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.css">
+
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1.6.2/dist/gitalk.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+
+<script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '56d2807240bc8e3190df',
+    clientSecret: '12d63223bc32c274131984657c437330f13c8ff2',
+    repo: 'eqshen.github.io',
+    owner: 'eqshen',
+    admin: ['eqshen'],
+    // id: location.pathname,      // Ensure uniqueness and length less than 50
+    id: md5(location.pathname),
+    distractionFreeMode: false,  // Facebook-like distraction free mode
+    pagerDirection: 'last'
+  })
+
+  gitalk.render('gitalk-container')
+</script>
+  
+</article>
+
+</section>
+      <footer class="footer">
+  <div class="outer">
+    <ul>
+      <li>
+        Copyrights &copy;
+        2020-2022
+        <i class="ri-heart-fill heart_icon"></i> EQShen
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        
+        Powered by <a href="https://hexo.io" target="_blank">Hexo</a>
+        <span class="division">|</span>
+        Theme - <a href="https://github.com/Shen-Yu/hexo-theme-ayer" target="_blank">Ayer</a>
+        
+      </li>
+    </ul>
+    <ul>
+      <li>
+        
+        
+        <span>
+  <span><i class="ri-user-3-fill"></i>Visitors:<span id="busuanzi_value_site_uv"></span></s>
+  <span class="division">|</span>
+  <span><i class="ri-eye-fill"></i>Views:<span id="busuanzi_value_page_pv"></span></span>
+</span>
+        
+      </li>
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      
+    </ul>
+    <ul>
+      <li>
+        <!-- cnzz统计 -->
+        
+      </li>
+    </ul>
+  </div>
+</footer>
+      <div class="float_btns">
+        <div class="totop" id="totop">
+  <i class="ri-arrow-up-line"></i>
+</div>
+
+<div class="todark" id="todark">
+  <i class="ri-moon-line"></i>
+</div>
+
+      </div>
+    </main>
+    <aside class="sidebar on">
+      <button class="navbar-toggle"></button>
+<nav class="navbar">
+  
+  <div class="logo">
+    <a href="/"><img src="/images/ayer-side.svg" alt="EQShen"></a>
+  </div>
+  
+  <ul class="nav nav-main">
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/">主页</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/archives">归档</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/categories">分类</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/tags">标签</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/friends">友链</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2020/03/22/sys-aboutMe">关于我</a>
+    </li>
+    
+  </ul>
+</nav>
+<nav class="navbar navbar-bottom">
+  <ul class="nav">
+    <li class="nav-item">
+      
+      <a class="nav-item-link nav-item-search"  title="Search">
+        <i class="ri-search-line"></i>
+      </a>
+      
+      
+      <a class="nav-item-link" target="_blank" href="/atom.xml" title="RSS Feed">
+        <i class="ri-rss-line"></i>
+      </a>
+      
+    </li>
+  </ul>
+</nav>
+<div class="search-form-wrap">
+  <div class="local-search local-search-plugin">
+  <input type="search" id="local-search-input" class="local-search-input" placeholder="Search...">
+  <div id="local-search-result" class="local-search-result"></div>
+</div>
+</div>
+    </aside>
+    <script>
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        document.querySelector('.content').classList.remove('on');
+        document.querySelector('.sidebar').classList.remove('on');
+      }
+    </script>
+    <div id="mask"></div>
+
+<!-- #reward -->
+<div id="reward">
+  <span class="close"><i class="ri-close-line"></i></span>
+  <p class="reward-p"><i class="ri-cup-line"></i>请我喝杯咖啡吧~</p>
+  <div class="reward-box">
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/alipay.jpg">
+      <span class="reward-type">支付宝</span>
+    </div>
+    
+    
+    <div class="reward-item">
+      <img class="reward-img" src="https://cdn.jsdelivr.net/gh/Shen-Yu/cdn/img/wechat.jpg">
+      <span class="reward-type">微信</span>
+    </div>
+    
+  </div>
+</div>
+    
+<script src="/js/jquery-2.0.3.min.js"></script>
+
+
+<script src="/js/lazyload.min.js"></script>
+
+<!-- Tocbot -->
+
+
+<script src="/js/tocbot.min.js"></script>
+
+<script>
+  tocbot.init({
+    tocSelector: '.tocbot',
+    contentSelector: '.article-entry',
+    headingSelector: 'h1, h2, h3, h4, h5, h6',
+    hasInnerContainers: true,
+    scrollSmooth: true,
+    scrollContainer: 'main',
+    positionFixedSelector: '.tocbot',
+    positionFixedClass: 'is-position-fixed',
+    fixedSidebarOffset: 'auto'
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.css">
+<script src="https://cdn.jsdelivr.net/npm/justifiedGallery@3.7.0/dist/js/jquery.justifiedGallery.min.js"></script>
+
+<script src="/dist/main.js"></script>
+
+<!-- ImageViewer -->
+
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe. 
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" style="display:none" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css">
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+
+<script>
+    function viewer_init() {
+        let pswpElement = document.querySelectorAll('.pswp')[0];
+        let $imgArr = document.querySelectorAll(('.article-entry img:not(.reward-img)'))
+
+        $imgArr.forEach(($em, i) => {
+            $em.onclick = () => {
+                // slider展开状态
+                // todo: 这样不好，后面改成状态
+                if (document.querySelector('.left-col.show')) return
+                let items = []
+                $imgArr.forEach(($em2, i2) => {
+                    let img = $em2.getAttribute('data-idx', i2)
+                    let src = $em2.getAttribute('data-target') || $em2.getAttribute('src')
+                    let title = $em2.getAttribute('alt')
+                    // 获得原图尺寸
+                    const image = new Image()
+                    image.src = src
+                    items.push({
+                        src: src,
+                        w: image.width || $em2.width,
+                        h: image.height || $em2.height,
+                        title: title
+                    })
+                })
+                var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, items, {
+                    index: parseInt(i)
+                });
+                gallery.init()
+            }
+        })
+    }
+    viewer_init()
+</script>
+
+<!-- MathJax -->
+
+<!-- Katex -->
+
+<!-- busuanzi  -->
+
+
+<script src="/js/busuanzi-2.3.pure.min.js"></script>
+
+
+<!-- ClickLove -->
+
+
+<script src="/js/clickLove.js"></script>
+
+
+<!-- ClickBoom1 -->
+
+<!-- ClickBoom2 -->
+
+<!-- CodeCopy -->
+
+
+<link rel="stylesheet" href="/css/clipboard.css">
+
+<script src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js"></script>
+<script>
+  function wait(callback, seconds) {
+    var timelag = null;
+    timelag = window.setTimeout(callback, seconds);
+  }
+  !function (e, t, a) {
+    var initCopyCode = function(){
+      var copyHtml = '';
+      copyHtml += '<button class="btn-copy" data-clipboard-snippet="">';
+      copyHtml += '<i class="ri-file-copy-2-line"></i><span>COPY</span>';
+      copyHtml += '</button>';
+      $(".highlight .code pre").before(copyHtml);
+      $(".article pre code").before(copyHtml);
+      var clipboard = new ClipboardJS('.btn-copy', {
+        target: function(trigger) {
+          return trigger.nextElementSibling;
+        }
+      });
+      clipboard.on('success', function(e) {
+        let $btn = $(e.trigger);
+        $btn.addClass('copied');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-checkbox-circle-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPIED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-checkbox-circle-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+      clipboard.on('error', function(e) {
+        e.clearSelection();
+        let $btn = $(e.trigger);
+        $btn.addClass('copy-failed');
+        let $icon = $($btn.find('i'));
+        $icon.removeClass('ri-file-copy-2-line');
+        $icon.addClass('ri-time-line');
+        let $span = $($btn.find('span'));
+        $span[0].innerText = 'COPY FAILED';
+        
+        wait(function () { // 等待两秒钟后恢复
+          $icon.removeClass('ri-time-line');
+          $icon.addClass('ri-file-copy-2-line');
+          $span[0].innerText = 'COPY';
+        }, 2000);
+      });
+    }
+    initCopyCode();
+  }(window, document);
+</script>
+
+
+<!-- CanvasBackground -->
+
+
+    
+  </div>
+</body>
+
+</html>
